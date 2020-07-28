@@ -36,7 +36,7 @@ def _check_dependencies(conf, modules, mandatory):
         modules = Utils.to_list (modules)
 
     for module in modules:
-        retval = conf.check_cfg(package = 'libns3-dev-%s-%s' % (module, libversion),
+        retval = conf.check_cfg(package = 'libns3.30.1-%s-%s' % (module, libversion),
                                 args='--cflags --libs', mandatory=mandatory,
                                 msg="Checking for ns3-%s" % module,
                                 uselib_store='NS3_%s' % module.upper())
