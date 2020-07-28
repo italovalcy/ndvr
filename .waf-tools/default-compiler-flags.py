@@ -140,7 +140,7 @@ class GccBasicFlags(CompilerFlags):
         flags['CXXFLAGS'] += ['-O0',
                               '-Og', # gcc >= 4.8, clang >= 4.0
                               '-g3',
-                              '-pedantic',
+                              #'-pedantic',
                               '-Wall',
                               '-Wextra',
                               # '-Werror',
