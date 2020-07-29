@@ -54,16 +54,18 @@ void
 Nrdv::SendHello() {
   Name nameWithSequence = Name(m_helloName);
   nameWithSequence.append(m_network);
-  nameWithSequence.append(m_routerName);
+  // TODO: include or not the wireEncode()?
+  nameWithSequence.append(m_routerName.wireEncode());
+  // TODO: hello should not include the version
   //nameWithSequence.appendSequenceNumber(m_seq++);
 
   Interest interest = Interest();
   interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
   interest.setName(nameWithSequence);
   interest.setCanBePrefix(false);
-  interest.setInterestLifetime(time::milliseconds(1000));
+  interest.setInterestLifetime(time::milliseconds(0));
 
-  NS_LOG_INFO("> Interest for " << m_seq);
+  NS_LOG_INFO("Sending Interest " << nameWithSequence);
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
@@ -73,15 +75,16 @@ Nrdv::SendHello() {
 }
 
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
-  std::cout << "create data" << std::endl;
+  const ndn::Name interestName(interest.getName());
+
+  NS_LOG_INFO("Nrdv::Hello - Received Interest " << interestName);
+  NS_LOG_INFO("Nrdv::Hello - Neighbor: " << interestName.get(-1));
+
+  // TODO: helloInterest dont need to be replied
   auto data = std::make_shared<ndn::Data>(interest.getName());
-  std::cout << "set freshness" << std::endl;
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
-  std::cout << "set content" << std::endl;
   data->setContent(std::make_shared< ::ndn::Buffer>(1024));
-  std::cout << "sign" << std::endl;
   m_keyChain.sign(*data);
-  std::cout << "put" << std::endl;
   m_face.put(*data);
 }
 
