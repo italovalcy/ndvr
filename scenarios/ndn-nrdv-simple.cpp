@@ -23,6 +23,8 @@ main(int argc, char* argv[])
   ndnHelper.Install(node);
 
   ndn::AppHelper appHelper("NrdvApp");
+  appHelper.SetAttribute("Network", StringValue("/ndn"));
+  appHelper.SetAttribute("RouterName", StringValue("/\%C1.Router/RouterA"));
   appHelper.Install(node)
     .Start(Seconds(6.5));
 

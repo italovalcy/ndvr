@@ -7,6 +7,7 @@
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/security/key-chain.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
+#include "ns3/core-module.h"
 #include "ns3/random-variable-stream.h"
 
 #include <iostream>
@@ -25,7 +26,7 @@ public:
     std::string what_;
   };
 
-  Nrdv(ndn::KeyChain& keyChain);
+  Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName);
   void run();
   void Start();
   void Stop();
@@ -37,12 +38,13 @@ private:
 
 private:
   ndn::KeyChain& m_keyChain;
-  ndn::Face m_face;
   ndn::Scheduler m_scheduler;
-  Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator
   uint32_t m_seq;
-  Name m_name;
+  ns3::Ptr<ns3::UniformRandomVariable> m_rand; ///< @brief nonce generator
+  Name m_network;
+  Name m_routerName;
   Name m_helloName;
+  ndn::Face m_face;
 };
 
 } // namespace nrdv

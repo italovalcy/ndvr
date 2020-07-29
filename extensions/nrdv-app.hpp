@@ -20,14 +20,17 @@ public:
   {
     static TypeId tid = TypeId("NrdvApp")
       .SetParent<Application>()
-      .AddConstructor<NrdvApp>();
-
+      .AddConstructor<NrdvApp>()
+      .AddAttribute("Network", "Name of the network the router belongs to in ndn URI format", StringValue("/ndn"),
+                    ndn::MakeNameAccessor(&NrdvApp::network_), ndn::MakeNameChecker())
+      .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
+                    ndn::MakeNameAccessor(&NrdvApp::routerName_), ndn::MakeNameChecker());
     return tid;
   }
 
 protected:
   virtual void StartApplication() {
-    m_instance.reset(new ::ndn::nrdv::Nrdv(ndn::StackHelper::getKeyChain()));
+    m_instance.reset(new ::ndn::nrdv::Nrdv(ndn::StackHelper::getKeyChain(), network_, routerName_));
     m_instance->Start();
   }
 
@@ -38,6 +41,8 @@ protected:
 
 private:
   std::unique_ptr<::ndn::nrdv::Nrdv> m_instance;
+  ndn::Name network_;
+  ndn::Name routerName_;
 };
 
 } // namespace ns3

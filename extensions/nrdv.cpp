@@ -9,11 +9,13 @@ NS_LOG_COMPONENT_DEFINE("ndn.Nrdv");
 namespace ndn {
 namespace nrdv {
 
-Nrdv::Nrdv(ndn::KeyChain& keyChain) 
+Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   : m_keyChain(keyChain)
   , m_scheduler(m_face.getIoService())
   , m_seq(0)
-  , m_rand(CreateObject<UniformRandomVariable>())
+  , m_rand(ns3::CreateObject<ns3::UniformRandomVariable>())
+  , m_network(network)
+  , m_routerName(routerName)
   , m_helloName("/nrdv")
 {
   m_face.setInterestFilter("/nrdv", std::bind(&Nrdv::OnHelloInterest, this, _2),
@@ -44,27 +46,28 @@ void Nrdv::run() {
 
 void
 Nrdv::ScheduleNextHello() {
+  using namespace ns3;
   Simulator::Schedule(Seconds(1.0), &Nrdv::SendHello, this);
 }
 
 void
 Nrdv::SendHello() {
-  shared_ptr<Name> nameWithSequence = make_shared<Name>(m_helloName);
-  nameWithSequence->appendSequenceNumber(m_name);
-  nameWithSequence->appendSequenceNumber(m_seq++);
+  Name nameWithSequence = Name(m_helloName);
+  nameWithSequence.append(m_network);
+  nameWithSequence.append(m_routerName);
+  //nameWithSequence.appendSequenceNumber(m_seq++);
 
-  shared_ptr<Interest> interest = make_shared<Interest>();
-  interest->setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
-  interest->setName(*nameWithSequence);
-  interest->setCanBePrefix(false);
-  time::milliseconds interestLifeTime(1000);
-  interest->setInterestLifetime(interestLifeTime);
+  Interest interest = Interest();
+  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
+  interest.setName(nameWithSequence);
+  interest.setCanBePrefix(false);
+  interest.setInterestLifetime(time::milliseconds(1000));
 
-  // NS_LOG_INFO ("Requesting Interest: \n" << *interest);
   NS_LOG_INFO("> Interest for " << m_seq);
 
-  m_transmittedInterests(interest, this, m_face);
-  m_appLink->onReceiveInterest(*interest);
+  m_face.expressInterest(interest, [](const Interest&, const Data&) {},
+                        [](const Interest&, const lp::Nack&) {},
+                        [](const Interest&) {});
 
   ScheduleNextHello();
 }
