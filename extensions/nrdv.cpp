@@ -23,6 +23,8 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
       throw Error("Failed to register sync interest prefix: " + reason);
   });
 
+  buildRouterPrefix();
+
   // use scheduler to send interest later on consumer face
   //m_scheduler.schedule(ndn::time::seconds(2), [this] {
   //    m_face.expressInterest(ndn::Interest("/nrdv/helloworld"),
@@ -53,9 +55,7 @@ Nrdv::ScheduleNextHello() {
 void
 Nrdv::SendHello() {
   Name nameWithSequence = Name(m_helloName);
-  nameWithSequence.append(m_network);
-  // TODO: include or not the wireEncode()?
-  nameWithSequence.append(m_routerName.wireEncode());
+  nameWithSequence.append(getRouterPrefix());
   // TODO: hello should not include the version
   //nameWithSequence.appendSequenceNumber(m_seq++);
 
@@ -76,9 +76,24 @@ Nrdv::SendHello() {
 
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
+  std::string routerTag = "\%C1.Router";
+  std::string neighName = ExtractNeighborName(interestName);
 
   NS_LOG_INFO("Nrdv::Hello - Received Interest " << interestName);
-  NS_LOG_INFO("Nrdv::Hello - Neighbor: " << interestName.get(-1));
+  NS_LOG_INFO("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTag(interestName));
+  NS_LOG_INFO("Nrdv::Hello - Received neighName: " << neighName);
+  NS_LOG_INFO("Nrdv::Hello - Expected cmdMarker: " << routerTag);
+
+  if (ExtractRouterTag(interestName) != routerTag) {
+    NS_LOG_DEBUG("Not a router, ignoring...");
+    return;
+  }
+  if (m_neighMap.count(neighName)) {
+    NS_LOG_DEBUG("Already known router, ignoring...");
+    return;
+  }
+  NeighborEntry neigh(neighName, 0);
+  m_neighMap[neighName] = neigh;
 
   // TODO: helloInterest dont need to be replied
   auto data = std::make_shared<ndn::Data>(interest.getName());
