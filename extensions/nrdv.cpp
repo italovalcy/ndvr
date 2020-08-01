@@ -21,6 +21,9 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   , m_network(network)
   , m_routerName(routerName)
   , m_helloName("/nrdv")
+  , m_helloIntervalIni(1)
+  , m_helloIntervalCur(1)
+  , m_helloIntervalMax(60)
 {
   m_face.setInterestFilter(m_helloName, std::bind(&Nrdv::OnHelloInterest, this, _2),
     [this](const Name&, const std::string& reason) {
@@ -75,7 +78,7 @@ Nrdv::registerPrefixes() {
 void
 Nrdv::ScheduleNextHello() {
   using namespace ns3;
-  Simulator::Schedule(Seconds(1.0), &Nrdv::SendHello, this);
+  Simulator::Schedule(Seconds(m_helloIntervalCur), &Nrdv::SendHello, this);
 }
 
 void
@@ -122,8 +125,11 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   }
   if (m_neighMap.count(neighName)) {
     NS_LOG_DEBUG("Already known router, ignoring...");
+    // exponetially increase the hellInterval until the maximum allowed
+    m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
     return;
   }
+  m_helloIntervalCur = m_helloIntervalIni;
   NeighborEntry neigh(neighName, 0);
   m_neighMap[neighName] = neigh;
 

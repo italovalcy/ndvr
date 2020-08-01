@@ -114,6 +114,9 @@ private:
 
   Name m_routerPrefix;
   NeighborMap m_neighMap;
+  int m_helloIntervalIni;
+  int m_helloIntervalCur;
+  int m_helloIntervalMax;
 };
 
 } // namespace nrdv
