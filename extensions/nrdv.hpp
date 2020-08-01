@@ -43,8 +43,8 @@ public:
       }
 
       NeighborEntry(std::string name, uint64_t ver)
-	: m_name(name)
-	, m_version(ver)
+        : m_name(name)
+        , m_version(ver)
       {
       }
 
@@ -53,20 +53,20 @@ public:
       }
 
       void SetName(std::string name) {
-	m_name = name;
+        m_name = name;
       }
       std::string GetName() {
-	return m_name;
+        return m_name;
       }
 
       void SetVersion(uint64_t ver) {
-	m_version = ver;
+        m_version = ver;
       }
       void IncVersion() {
-	m_version++;
+        m_version++;
       }
       uint64_t GetVersion() {
-	return m_version;
+        return m_version;
       }
     private:
       std::string m_name;
@@ -81,13 +81,6 @@ public:
   void Start();
   void Stop();
 
-  void
-  buildRouterPrefix()
-  {
-    m_routerPrefix = m_network;
-    m_routerPrefix.append(m_routerName);
-  }
-
   const ndn::Name&
   getRouterPrefix() const
   {
@@ -100,6 +93,14 @@ private:
   void OnHelloInterest(const ndn::Interest& interest);
   void SendHello();
   void ScheduleNextHello();
+  void registerPrefixes();
+
+  void
+  buildRouterPrefix()
+  {
+    m_routerPrefix = m_network;
+    m_routerPrefix.append(m_routerName);
+  }
 
 private:
   ndn::KeyChain& m_keyChain;
