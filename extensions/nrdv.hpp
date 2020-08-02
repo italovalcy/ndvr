@@ -22,83 +22,57 @@ static const Name kNrdvHelloPrefix = Name("/nrdv/hello");
 static const Name kNrdvDataPrefix = Name("/nrdv/data");
 static const Name kNrdvKeyPrefix = Name("/nrdv/key");
 
-/*! \brief Extracts the neighbor name from a Hello Interest packet.
- *
- * \param interestName The interest name received on a Hello packet from
- * a neighbor. It should be formatted:
- *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
- *
- * Example: /NRDV/HELLO/ufba/%C1.Router/Router1
- *
- */
-inline std::string ExtractNeighborNameFromHello(const Name& n) {
-  return n.getSubName(kNrdvHelloPrefix.size()+1, 2).toUri();
-}
 
-/*! \brief Extracts the router tag (command marker) from Interest name
- *
- * \param interestName The interest name received on a Hello packet from
- * a neighbor. It should be formatted:
- *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
- *
- * Example: /NRDV/HELLO/ufba/%C1.Router/Router1
- *
- */
-inline std::string ExtractRouterTagFromHello(const Name& n) {
-  return n.get(-2).toUri();
-}
+class NeighborEntry {
+public:
+  NeighborEntry()
+  {
+  }
+
+  NeighborEntry(std::string name, uint64_t ver)
+    : m_name(name)
+    , m_version(ver)
+  {
+  }
+
+  ~NeighborEntry()
+  {
+  }
+
+  void SetName(std::string name) {
+    m_name = name;
+  }
+  std::string GetName() {
+    return m_name;
+  }
+
+  void SetVersion(uint64_t ver) {
+    m_version = ver;
+  }
+  void IncVersion() {
+    m_version++;
+  }
+  uint64_t GetVersion() {
+    return m_version;
+  }
+private:
+  std::string m_name;
+  uint64_t m_version;
+  //TODO: lastSeen
+  //TODO: key  
+};
+
+class Error : public std::exception {
+public:
+  Error(const std::string& what) : what_(what) {}
+  virtual const char* what() const noexcept override { return what_.c_str(); }
+private:
+  std::string what_;
+};
 
 class Nrdv
 {
 public:
-  class Error : public std::exception {
-   public:
-    Error(const std::string& what) : what_(what) {}
-    virtual const char* what() const noexcept override { return what_.c_str(); }
-   private:
-    std::string what_;
-  };
-
-  class NeighborEntry {
-    public:
-      NeighborEntry()
-      {
-      }
-
-      NeighborEntry(std::string name, uint64_t ver)
-        : m_name(name)
-        , m_version(ver)
-      {
-      }
-
-      ~NeighborEntry()
-      {
-      }
-
-      void SetName(std::string name) {
-        m_name = name;
-      }
-      std::string GetName() {
-        return m_name;
-      }
-
-      void SetVersion(uint64_t ver) {
-        m_version = ver;
-      }
-      void IncVersion() {
-        m_version++;
-      }
-      uint64_t GetVersion() {
-        return m_version;
-      }
-    private:
-      std::string m_name;
-      uint64_t m_version;
-      //TODO: lastSeen
-      //TODO: key  
-  };
-
-
   Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName);
   void run();
   void Start();
@@ -127,6 +101,35 @@ private:
   {
     m_routerPrefix = m_network;
     m_routerPrefix.append(m_routerName);
+  }
+
+  /** @brief Extracts the neighbor name from a Hello Interest packet.
+   *
+   * \param interestName The interest name received on a Hello packet from
+   * a neighbor. It should be formatted:
+   *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
+   *
+   * Example: 
+   *    Input: /NRDV/HELLO/ufba/%C1.Router/Router1
+   *    Returns: /%C1.Router/Router1
+   */
+  std::string ExtractNeighborNameFromHello(const Name& n) {
+    return n.getSubName(kNrdvHelloPrefix.size()+1, 2).toUri();
+  }
+  
+  /** @brief Extracts the router tag (command marker) from Interest name
+   *
+   * \param interestName The interest name received on a Hello packet from
+   * a neighbor. It should be formatted:
+   *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
+   *
+   * Example: 
+   *    Input: /NRDV/HELLO/ufba/%C1.Router/Router1
+   *    Returns: %C1.Router
+   *
+   */
+  std::string ExtractRouterTagFromHello(const Name& n) {
+    return n.get(-2).toUri();
   }
 
 private:
