@@ -1,0 +1,16 @@
+/* -*- Mode:protobuf; indent-tabs-mode:nil; -*- */
+// More information: https://developers.google.com/protocol-buffers/docs/cpptutorial
+
+syntax = "proto3";
+
+package ndn.nrdv.proto;
+
+// Distance Vector Information
+message DvInfo {
+  message Entry {
+    string prefix = 1;
+    uint64 seq = 2;
+    uint32 cost = 3;
+  }
+  repeated Entry entry = 1;
+}
