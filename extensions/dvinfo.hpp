@@ -1,5 +1,5 @@
-#ifndef _NAMEPREFIXES_H_
-#define _NAMEPREFIXES_H_
+#ifndef _DVINFO_H_
+#define _DVINFO_H_
 
 #include <map>
 
@@ -7,20 +7,20 @@
 namespace ndn {
 namespace nrdv {
 
-class NamePrefix {
+class DvInfoEntry {
 public:
-  NamePrefix()
+  DvInfoEntry()
   {
   }
 
-  NamePrefix(std::string name, uint64_t seqNum, uint32_t cost)
+  DvInfoEntry(std::string name, uint64_t seqNum, uint32_t cost)
     : m_name(name)
     , m_seqNum(seqNum)
     , m_cost(cost)
   {
   }
 
-  ~NamePrefix()
+  ~DvInfoEntry()
   {
   }
 
@@ -54,9 +54,19 @@ private:
   uint32_t m_cost;
 };
 
-typedef std::map<std::string, NamePrefix> NamePrefixMap;
+/**
+ * @brief represents the Distance Vector information
+ *
+ *   The Distance Vector Information contains a collection of Routes (ie,
+ *   Name Prefixes), Cost and Sequence Number, each represents a piece of 
+ *   dynamic routing information learned from neighbors.
+ *
+ *   TODO: Routes associated with the same namespace are collected 
+ *   into a RIB entry.
+ */
+typedef std::map<std::string, DvInfoEntry> DvInfoMap;
 
 } // namespace nrdv
 } // namespace ndn
 
-#endif // _NAMEPREFIXES_H_
+#endif // _DVINFO_H_
