@@ -3,6 +3,8 @@
 #ifndef NRDV_HPP
 #define NRDV_HPP
 
+#include "name-prefixes.hpp"
+
 #include <iostream>
 #include <map>
 #include <string>
@@ -76,7 +78,7 @@ private:
 class Nrdv
 {
 public:
-  Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName);
+  Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& np);
   void run();
   void Start();
   void Stop();
@@ -149,6 +151,7 @@ private:
 
   Name m_routerPrefix;
   NeighborMap m_neighMap;
+  NamePrefixMap m_np;
   int m_helloIntervalIni;
   int m_helloIntervalCur;
   int m_helloIntervalMax;

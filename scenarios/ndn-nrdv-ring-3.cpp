@@ -52,6 +52,10 @@ main(int argc, char* argv[])
     appHelper.SetAttribute("RouterName", StringValue(routerName));
     appHelper.Install(node)
       .Start(Seconds(1.0));
+
+    auto app = DynamicCast<NrdvApp>(node->GetApplication(0));
+    app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
+    app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
   }
 
   Simulator::Stop(Seconds(20.0));

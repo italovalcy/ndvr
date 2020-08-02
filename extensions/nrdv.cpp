@@ -13,7 +13,7 @@ NS_LOG_COMPONENT_DEFINE("ndn.Nrdv");
 namespace ndn {
 namespace nrdv {
 
-Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
+Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& npv)
   : m_keyChain(keyChain)
   , m_scheduler(m_face.getIoService())
   , m_seq(0)
@@ -26,6 +26,10 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   , m_dvinfoInterval(1)
   , m_dvinfoTimeout(1)
 {
+  for (std::vector<std::string>::iterator it = npv.begin() ; it != npv.end(); ++it) {
+    NamePrefix np(*it, 1, 0);
+    m_np[*it] = np;
+  }
   m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);

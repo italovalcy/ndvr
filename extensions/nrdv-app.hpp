@@ -4,6 +4,7 @@
 #define NRDV_APP_HPP
 
 #include "nrdv.hpp"
+#include "name-prefixes.hpp"
 
 #include "ns3/ndnSIM/helper/ndn-stack-helper.hpp"
 #include "ns3/application.h"
@@ -28,9 +29,13 @@ public:
     return tid;
   }
 
+  void AddNamePrefix(std::string name) {
+    namePrefixes_.push_back(name);
+  }
+
 protected:
   virtual void StartApplication() {
-    m_instance.reset(new ::ndn::nrdv::Nrdv(ndn::StackHelper::getKeyChain(), network_, routerName_));
+    m_instance.reset(new ::ndn::nrdv::Nrdv(ndn::StackHelper::getKeyChain(), network_, routerName_, namePrefixes_));
     m_instance->Start();
   }
 
@@ -43,6 +48,7 @@ private:
   std::unique_ptr<::ndn::nrdv::Nrdv> m_instance;
   ndn::Name network_;
   ndn::Name routerName_;
+  std::vector<std::string> namePrefixes_;
 };
 
 } // namespace ns3
