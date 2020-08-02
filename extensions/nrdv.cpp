@@ -20,18 +20,18 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   , m_rand(ns3::CreateObject<ns3::UniformRandomVariable>())
   , m_network(network)
   , m_routerName(routerName)
-  , m_helloName("/nrdv")
   , m_helloIntervalIni(1)
   , m_helloIntervalCur(1)
   , m_helloIntervalMax(60)
 {
-  m_face.setInterestFilter(m_helloName, std::bind(&Nrdv::OnHelloInterest, this, _2),
+  m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);
   });
 
   buildRouterPrefix();
   registerPrefixes();
+  ns3::Simulator::Schedule(ns3::Seconds(1.0), &Nrdv::printFib, this);
 
   // use scheduler to send interest later on consumer face
   //m_scheduler.schedule(ndn::time::seconds(2), [this] {
@@ -54,25 +54,41 @@ void Nrdv::run() {
   // m_faceConsumer.getIoService().run(); // will crash
 }
 
+void Nrdv::printFib() {
+  using namespace ns3;
+  using namespace ns3::ndn;
+
+  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
+  const ::nfd::Fib& fib = thisNode->GetObject<L3Protocol>()->getForwarder()->getFib();
+  NS_LOG_DEBUG("FIB Size: " << fib.size());
+  for(const ::nfd::fib::Entry& fibEntry : fib) {
+    std::string s;
+    for (const auto &nh : fibEntry.getNextHops()) s += std::to_string(nh.getFace().getId()) + ",";
+    NS_LOG_DEBUG("MyFIB: prefix=" << fibEntry.getPrefix() << " via faceIdList=" << s);
+  }
+}
+
 void
 Nrdv::registerPrefixes() {
   using namespace ns3;
   using namespace ns3::ndn;
 
-  int32_t metric = 0;
-  Ptr<Node> thisNode;
-  thisNode = NodeList::GetNode(Simulator::GetContext());
+  int32_t metric = 0; // should it be 0 or std::numeric_limits<int32_t>::max() ??
+  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
   NS_LOG_DEBUG("THIS node is: " << thisNode->GetId());
 
   for (uint32_t deviceId = 0; deviceId < thisNode->GetNDevices(); deviceId++) {
     Ptr<NetDevice> device = thisNode->GetDevice(deviceId);
     Ptr<L3Protocol> ndn = thisNode->GetObject<L3Protocol>();
     NS_ASSERT_MSG(ndn != nullptr, "Ndn stack should be installed on the node");
+
     auto face = ndn->getFaceByNetDevice(device);
     NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
-    NS_LOG_DEBUG("Adding prefix to face id = " << face->getId());
-    FibHelper::AddRoute(thisNode, m_helloName, face, metric);
+
+    NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNrdvPrefix << " via faceId=" << face->getId());
+    FibHelper::AddRoute(thisNode, kNrdvPrefix, face, metric);
   }
+
 }
 
 void
@@ -83,7 +99,7 @@ Nrdv::ScheduleNextHello() {
 
 void
 Nrdv::SendHello() {
-  Name nameWithSequence = Name(m_helloName);
+  Name nameWithSequence = Name(kNrdvHelloPrefix);
   nameWithSequence.append(getRouterPrefix());
   // TODO: hello should not include the version
   //nameWithSequence.appendSequenceNumber(m_seq++);
@@ -104,27 +120,39 @@ Nrdv::SendHello() {
   ScheduleNextHello();
 }
 
+void Nrdv::processInterest(const ndn::Interest& interest) {
+  const ndn::Name interestName(interest.getName());
+  if (kNrdvHelloPrefix.isPrefixOf(interestName))
+    return OnHelloInterest(interest);
+  else if (kNrdvDataPrefix.isPrefixOf(interestName))
+    return OnDataInterest(interest);
+  else if (kNrdvKeyPrefix.isPrefixOf(interestName))
+    return OnKeyInterest(interest);
+
+  NS_LOG_INFO("Unknown Interest " << interestName);
+}
+
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
   std::string routerTag = "\%C1.Router";
-  std::string neighName = ExtractNeighborName(interestName);
+  std::string neighName = ExtractNeighborNameFromHello(interestName);
 
-  NS_LOG_INFO("Nrdv::Hello - Received Interest " << interestName);
-  NS_LOG_INFO("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTag(interestName));
-  NS_LOG_INFO("Nrdv::Hello - Received neighName: " << neighName);
-  NS_LOG_INFO("Nrdv::Hello - Expected cmdMarker: " << routerTag);
-  NS_LOG_INFO("Nrdv::Hello - My name: " << m_routerName);
+  NS_LOG_INFO("Received HELLO Interest " << interestName);
+  //NS_LOG_DEBUG("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTagFromHello(interestName));
+  //NS_LOG_DEBUG("Nrdv::Hello - Received neighName: " << neighName);
+  //NS_LOG_DEBUG("Nrdv::Hello - Expected cmdMarker: " << routerTag);
+  //NS_LOG_DEBUG("Nrdv::Hello - My name: " << m_routerName);
 
-  if (ExtractRouterTag(interestName) != routerTag) {
-    NS_LOG_DEBUG("Not a router, ignoring...");
+  if (ExtractRouterTagFromHello(interestName) != routerTag) {
+    NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
   if (neighName == m_routerName) {
-    NS_LOG_DEBUG("Hello from myself, ignoring...");
+    NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
   if (m_neighMap.count(neighName)) {
-    NS_LOG_DEBUG("Already known router, ignoring...");
+    NS_LOG_INFO("Already known router, ignoring...");
     // exponetially increase the hellInterval until the maximum allowed
     m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
     return;
@@ -132,13 +160,18 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   m_helloIntervalCur = m_helloIntervalIni;
   NeighborEntry neigh(neighName, 0);
   m_neighMap[neighName] = neigh;
-
-  // TODO: helloInterest dont need to be replied
+}
+void Nrdv::OnDataInterest(const ndn::Interest& interest) {
+  NS_LOG_INFO("Received DATA Interest " << interest.getName());
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   data->setContent(std::make_shared< ::ndn::Buffer>(1024));
   m_keyChain.sign(*data);
   m_face.put(*data);
+}
+
+void Nrdv::OnKeyInterest(const ndn::Interest& interest) {
+  NS_LOG_INFO("Received KEY Interest " << interest.getName());
 }
 
 } // namespace nrdv

@@ -17,11 +17,34 @@
 namespace ndn {
 namespace nrdv {
 
-inline std::string ExtractNeighborName(const Name& n) {
-  return n.getSubName(2, 2).toUri();
+static const Name kNrdvPrefix = Name("/nrdv");
+static const Name kNrdvHelloPrefix = Name("/nrdv/hello");
+static const Name kNrdvDataPrefix = Name("/nrdv/data");
+static const Name kNrdvKeyPrefix = Name("/nrdv/key");
+
+/*! \brief Extracts the neighbor name from a Hello Interest packet.
+ *
+ * \param interestName The interest name received on a Hello packet from
+ * a neighbor. It should be formatted:
+ *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
+ *
+ * Example: /NRDV/HELLO/ufba/%C1.Router/Router1
+ *
+ */
+inline std::string ExtractNeighborNameFromHello(const Name& n) {
+  return n.getSubName(kNrdvHelloPrefix.size()+1, 2).toUri();
 }
 
-inline std::string ExtractRouterTag(const Name& n) {
+/*! \brief Extracts the router tag (command marker) from Interest name
+ *
+ * \param interestName The interest name received on a Hello packet from
+ * a neighbor. It should be formatted:
+ *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
+ *
+ * Example: /NRDV/HELLO/ufba/%C1.Router/Router1
+ *
+ */
+inline std::string ExtractRouterTagFromHello(const Name& n) {
   return n.get(-2).toUri();
 }
 
@@ -90,10 +113,14 @@ public:
 private:
   typedef std::map<std::string, NeighborEntry> NeighborMap;
 
+  void processInterest(const ndn::Interest& interest);
   void OnHelloInterest(const ndn::Interest& interest);
+  void OnDataInterest(const ndn::Interest& interest);
+  void OnKeyInterest(const ndn::Interest& interest);
   void SendHello();
   void ScheduleNextHello();
   void registerPrefixes();
+  void printFib();
 
   void
   buildRouterPrefix()
@@ -109,7 +136,6 @@ private:
   ns3::Ptr<ns3::UniformRandomVariable> m_rand; ///< @brief nonce generator
   Name m_network;
   Name m_routerName;
-  Name m_helloName;
   ndn::Face m_face;
 
   Name m_routerPrefix;

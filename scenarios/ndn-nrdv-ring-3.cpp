@@ -51,7 +51,7 @@ main(int argc, char* argv[])
     appHelper.SetAttribute("Network", StringValue("/ndn"));
     appHelper.SetAttribute("RouterName", StringValue(routerName));
     appHelper.Install(node)
-      .Start(Seconds(6.5));
+      .Start(Seconds(1.0));
   }
 
   Simulator::Stop(Seconds(20.0));
