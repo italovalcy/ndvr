@@ -19,7 +19,7 @@ namespace nrdv {
 
 static const Name kNrdvPrefix = Name("/nrdv");
 static const Name kNrdvHelloPrefix = Name("/nrdv/hello");
-static const Name kNrdvDataPrefix = Name("/nrdv/data");
+static const Name kNrdvDvInfoPrefix = Name("/nrdv/dvinfo");
 static const Name kNrdvKeyPrefix = Name("/nrdv/key");
 
 
@@ -55,6 +55,9 @@ public:
   uint64_t GetVersion() {
     return m_version;
   }
+  uint64_t GetNextVersion() {
+    return m_version++;
+  }
 private:
   std::string m_name;
   uint64_t m_version;
@@ -89,10 +92,13 @@ private:
 
   void processInterest(const ndn::Interest& interest);
   void OnHelloInterest(const ndn::Interest& interest);
-  void OnDataInterest(const ndn::Interest& interest);
   void OnKeyInterest(const ndn::Interest& interest);
-  void SendHello();
-  void ScheduleNextHello();
+  void OnDvInfoInterest(const ndn::Interest& interest);
+  void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
+  void OnDvInfoTimedOut(const ndn::Interest& interest);
+  void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
+  void SendDvInfoInterest(NeighborEntry& neighbor);
+  void SendHelloInterest();
   void registerPrefixes();
   void printFib();
 
@@ -146,6 +152,8 @@ private:
   int m_helloIntervalIni;
   int m_helloIntervalCur;
   int m_helloIntervalMax;
+  int m_dvinfoInterval;
+  int m_dvinfoTimeout;
 };
 
 } // namespace nrdv

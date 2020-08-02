@@ -23,6 +23,8 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   , m_helloIntervalIni(1)
   , m_helloIntervalCur(1)
   , m_helloIntervalMax(60)
+  , m_dvinfoInterval(1)
+  , m_dvinfoTimeout(1)
 {
   m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
@@ -32,26 +34,17 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName)
   buildRouterPrefix();
   registerPrefixes();
   ns3::Simulator::Schedule(ns3::Seconds(1.0), &Nrdv::printFib, this);
-
-  // use scheduler to send interest later on consumer face
-  //m_scheduler.schedule(ndn::time::seconds(2), [this] {
-  //    m_face.expressInterest(ndn::Interest("/nrdv/helloworld"),
-  //                                   std::bind([] { std::cout << "Hello!" << std::endl; }),
-  //                                   std::bind([] { std::cout << "NACK!" << std::endl; }),
-  //                                   std::bind([] { std::cout << "Bye!.." << std::endl; }));
-  //  });
 }
 
 void Nrdv::Start() {
-  SendHello();
+  SendHelloInterest();
 }
 
 void Nrdv::Stop() {
 }
 
 void Nrdv::run() {
-  m_face.processEvents(); // ok (will not block and do nothing)
-  // m_faceConsumer.getIoService().run(); // will crash
+  m_face.processEvents();
 }
 
 void Nrdv::printFib() {
@@ -92,40 +85,51 @@ Nrdv::registerPrefixes() {
 }
 
 void
-Nrdv::ScheduleNextHello() {
-  using namespace ns3;
-  Simulator::Schedule(Seconds(m_helloIntervalCur), &Nrdv::SendHello, this);
-}
-
-void
-Nrdv::SendHello() {
-  Name nameWithSequence = Name(kNrdvHelloPrefix);
-  nameWithSequence.append(getRouterPrefix());
-  // TODO: hello should not include the version
-  //nameWithSequence.appendSequenceNumber(m_seq++);
-
+Nrdv::SendHelloInterest() {
+  Name name = Name(kNrdvHelloPrefix);
+  name.append(getRouterPrefix());
+  NS_LOG_INFO("Sending Interest " << name);
 
   Interest interest = Interest();
   interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
-  interest.setName(nameWithSequence);
+  interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setInterestLifetime(time::milliseconds(0));
-
-  NS_LOG_INFO("Sending Interest " << nameWithSequence);
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
                         [](const Interest&) {});
 
-  ScheduleNextHello();
+  ns3::Simulator::Schedule(ns3::Seconds(m_helloIntervalCur), &Nrdv::SendHelloInterest, this);
+}
+
+void
+Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
+  NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
+  Name nameWithSequence = Name(kNrdvDvInfoPrefix);
+  nameWithSequence.append(neighbor.GetName());
+  nameWithSequence.appendSequenceNumber(neighbor.GetNextVersion());
+
+  Interest interest = Interest();
+  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
+  interest.setName(nameWithSequence);
+  interest.setCanBePrefix(false);
+  interest.setInterestLifetime(time::seconds(m_dvinfoTimeout));
+
+  m_face.expressInterest(interest,
+    std::bind(&Nrdv::OnDvInfoContent, this, _1, _2),
+    std::bind(&Nrdv::OnDvInfoNack, this, _1, _2),
+    std::bind(&Nrdv::OnDvInfoTimedOut, this, _1));
+
+  ns3::Simulator::Schedule(ns3::Seconds(m_dvinfoInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
 }
 
 void Nrdv::processInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
   if (kNrdvHelloPrefix.isPrefixOf(interestName))
     return OnHelloInterest(interest);
-  else if (kNrdvDataPrefix.isPrefixOf(interestName))
-    return OnDataInterest(interest);
+  else if (kNrdvDvInfoPrefix.isPrefixOf(interestName))
+    return OnDvInfoInterest(interest);
   else if (kNrdvKeyPrefix.isPrefixOf(interestName))
     return OnKeyInterest(interest);
 
@@ -160,9 +164,13 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   m_helloIntervalCur = m_helloIntervalIni;
   NeighborEntry neigh(neighName, 0);
   m_neighMap[neighName] = neigh;
+  SendDvInfoInterest(neigh);
 }
-void Nrdv::OnDataInterest(const ndn::Interest& interest) {
-  NS_LOG_INFO("Received DATA Interest " << interest.getName());
+
+void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
+  NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
+
+  // TODO: send our DV-Info
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   data->setContent(std::make_shared< ::ndn::Buffer>(1024));
@@ -172,6 +180,31 @@ void Nrdv::OnDataInterest(const ndn::Interest& interest) {
 
 void Nrdv::OnKeyInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received KEY Interest " << interest.getName());
+  // TODO: send our key??
+}
+
+void Nrdv::OnDvInfoTimedOut(const ndn::Interest& interest) {
+  NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName());
+  // TODO: Apply the same logic as in HelloProtocol::processInterestTimedOut (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
+  // TODO: what if node has moved?
+}
+
+void Nrdv::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
+  NS_LOG_DEBUG("Received Nack with reason: " << nack.getReason());
+  // should we treat as a timeout? should the Nack represent no changes on neigh DvInfo?
+  //m_scheduler.schedule(ndn::time::seconds(m_dvinfoInterval),
+  //  [this, interest] { processInterestTimedOut(interest); });
+}
+
+void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data) {
+  NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
+
+  if (data.getSignature().hasKeyLocator() &&
+      data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
+    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+  }
+
+  // TODO: validate data as in HelloProtocol::onContent (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
 }
 
 } // namespace nrdv
