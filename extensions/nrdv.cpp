@@ -27,8 +27,8 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<s
   , m_dvinfoTimeout(1)
 {
   for (std::vector<std::string>::iterator it = npv.begin() ; it != npv.end(); ++it) {
-    NamePrefix np(*it, 1, 0);
-    m_np[*it] = np;
+    DvInfoEntry dvinfoEntry(*it, 1, 0);
+    m_dvinfo[*it] = dvinfoEntry;
   }
   m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
@@ -143,11 +143,11 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
   std::string routerTag = "\%C1.Router";
-  std::string neighName = ExtractNeighborNameFromHello(interestName);
+  std::string neighPrefix = ExtractNeighborPrefixFromHello(interestName);
 
   NS_LOG_INFO("Received HELLO Interest " << interestName);
   //NS_LOG_DEBUG("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTagFromHello(interestName));
-  //NS_LOG_DEBUG("Nrdv::Hello - Received neighName: " << neighName);
+  //NS_LOG_DEBUG("Nrdv::Hello - Received neighName: " << neighPrefix);
   //NS_LOG_DEBUG("Nrdv::Hello - Expected cmdMarker: " << routerTag);
   //NS_LOG_DEBUG("Nrdv::Hello - My name: " << m_routerName);
 
@@ -155,29 +155,42 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
-  if (neighName == m_routerName) {
+  if (neighPrefix == m_routerPrefix) {
     NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
-  if (m_neighMap.count(neighName)) {
+  if (m_neighMap.count(neighPrefix)) {
     NS_LOG_INFO("Already known router, ignoring...");
     // exponetially increase the hellInterval until the maximum allowed
     m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
     return;
   }
   m_helloIntervalCur = m_helloIntervalIni;
-  NeighborEntry neigh(neighName, 0);
-  m_neighMap[neighName] = neigh;
+  NeighborEntry neigh(neighPrefix, 0);
+  m_neighMap[neighPrefix] = neigh;
   SendDvInfoInterest(neigh);
 }
 
 void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
 
+  // Sanity check
+  std::string routerPrefix = ExtractRouterPrefixFromDvInfo(interest.getName());
+  if (routerPrefix != m_routerPrefix) {
+    NS_LOG_INFO("Interest is not to me, ignoring.. received_name=" << routerPrefix << " my_name=" << m_routerPrefix);
+    return;
+  }
+
   // TODO: send our DV-Info
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
-  data->setContent(std::make_shared< ::ndn::Buffer>(1024));
+  // Set dvinfo
+  std::string dvinfo_str;
+  EncodeDvInfo(m_dvinfo, dvinfo_str);
+  NS_LOG_INFO("Sending DV-Info encoded: size=" << dvinfo_str.size());
+  //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
+  data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
+  // Sign and send
   m_keyChain.sign(*data);
   m_face.put(*data);
 }
@@ -209,6 +222,28 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   }
 
   // TODO: validate data as in HelloProtocol::onContent (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
+
+  //NS_LOG_INFO("Extract DV-Info...");
+  /* Extract DvInfo and process Distance Vector update */
+  const auto& content = data.getContent();
+  proto::DvInfo dvinfo_proto;
+  //NS_LOG_DEBUG("Content: size=" << content.value_size());
+  //NS_LOG_INFO("Trying to parser  DV-Info...");
+  if (!dvinfo_proto.ParseFromArray(content.value(), content.value_size())) {
+    NS_LOG_INFO("Invalid DvInfo content!!! Abort processing..");
+    return;
+  }
+  //NS_LOG_INFO("Parser complete! dvinfo_proto content is:");
+  //for (int i = 0; i < dvinfo_proto.entry_size(); ++i) {
+  //  const auto& entry = dvinfo_proto.entry(i);
+  //  NS_LOG_INFO("DV-Info from neighbor prefix=" << entry.prefix() << " seqNum=" << entry.seq() << " cost=" << entry.cost());
+  //}
+  //NS_LOG_INFO("Decoding...");
+  auto dvinfo_other = DecodeDvInfo(dvinfo_proto);
+  for (auto entry : dvinfo_other) {
+    NS_LOG_INFO("DV-Info from neighbor prefix=" << entry.first << " seqNum=" << entry.second.GetSeqNum() << " cost=" << entry.second.GetCost());
+  }
+  //NS_LOG_INFO("Done");
 }
 
 } // namespace nrdv

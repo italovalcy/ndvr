@@ -3,7 +3,6 @@
 #ifndef NRDV_HPP
 #define NRDV_HPP
 
-#include "name-prefixes.hpp"
 
 #include <iostream>
 #include <map>
@@ -13,8 +12,12 @@
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/security/key-chain.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
-#include "ns3/core-module.h"
-#include "ns3/random-variable-stream.h"
+#include <ns3/core-module.h>
+#include <ns3/random-variable-stream.h>
+
+#include "dvinfo.hpp"
+#include "nrdv-message.pb.h"
+#include "nrdv-helper.hpp"
 
 namespace ndn {
 namespace nrdv {
@@ -111,7 +114,7 @@ private:
     m_routerPrefix.append(m_routerName);
   }
 
-  /** @brief Extracts the neighbor name from a Hello Interest packet.
+  /** @brief Extracts the neighbor prefix from a Hello Interest packet.
    *
    * \param interestName The interest name received on a Hello packet from
    * a neighbor. It should be formatted:
@@ -119,10 +122,10 @@ private:
    *
    * Example: 
    *    Input: /NRDV/HELLO/ufba/%C1.Router/Router1
-   *    Returns: /%C1.Router/Router1
+   *    Returns: /ufba/%C1.Router/Router1
    */
-  std::string ExtractNeighborNameFromHello(const Name& n) {
-    return n.getSubName(kNrdvHelloPrefix.size()+1, 2).toUri();
+  std::string ExtractNeighborPrefixFromHello(const Name& n) {
+    return n.getSubName(kNrdvHelloPrefix.size(), 3).toUri();
   }
   
   /** @brief Extracts the router tag (command marker) from Interest name
@@ -140,6 +143,12 @@ private:
     return n.get(-2).toUri();
   }
 
+  /** @brief Extracts the router prefix from a DvInfo Interest packet.
+   */
+  std::string ExtractRouterPrefixFromDvInfo(const Name& n) {
+    return n.getSubName(kNrdvDvInfoPrefix.size(), 3).toUri();
+  }
+
 private:
   ndn::KeyChain& m_keyChain;
   ndn::Scheduler m_scheduler;
@@ -151,7 +160,8 @@ private:
 
   Name m_routerPrefix;
   NeighborMap m_neighMap;
-  NamePrefixMap m_np;
+  DvInfoMap m_dvinfo;
+  DvInfoMap m_dvinfoLearned;
   int m_helloIntervalIni;
   int m_helloIntervalCur;
   int m_helloIntervalMax;

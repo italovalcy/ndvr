@@ -4,7 +4,6 @@
 #define NRDV_APP_HPP
 
 #include "nrdv.hpp"
-#include "name-prefixes.hpp"
 
 #include "ns3/ndnSIM/helper/ndn-stack-helper.hpp"
 #include "ns3/application.h"
