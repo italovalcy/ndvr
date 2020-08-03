@@ -26,6 +26,7 @@ static const Name kNrdvPrefix = Name("/nrdv");
 static const Name kNrdvHelloPrefix = Name("/nrdv/hello");
 static const Name kNrdvDvInfoPrefix = Name("/nrdv/dvinfo");
 static const Name kNrdvKeyPrefix = Name("/nrdv/key");
+static const std::string kRouterTag = "\%C1.Router";
 
 
 class NeighborEntry {
@@ -106,6 +107,9 @@ private:
   void SendHelloInterest();
   void registerPrefixes();
   void printFib();
+  bool isInfinityCost(uint32_t cost);
+  bool isValidCost(uint32_t cost);
+  void processDvInfoFromNeighbor(std::string neighbor, DvInfoMap& dvinfo_other);
 
   void
   buildRouterPrefix()
@@ -141,6 +145,10 @@ private:
    */
   std::string ExtractRouterTagFromHello(const Name& n) {
     return n.get(-2).toUri();
+  }
+
+  bool isValidRouter(const Name& n, const Name& prefix) {
+    return n.get(prefix.size()+1).toUri() == kRouterTag;
   }
 
   /** @brief Extracts the router prefix from a DvInfo Interest packet.

@@ -1,6 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
 #include "nrdv.hpp"
+#include <limits>
 #include <ns3/simulator.h>
 #include <ns3/log.h>
 #include <ns3/ptr.h>
@@ -142,16 +143,14 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
 
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
-  std::string routerTag = "\%C1.Router";
-  std::string neighPrefix = ExtractNeighborPrefixFromHello(interestName);
 
   NS_LOG_INFO("Received HELLO Interest " << interestName);
   //NS_LOG_DEBUG("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTagFromHello(interestName));
   //NS_LOG_DEBUG("Nrdv::Hello - Received neighName: " << neighPrefix);
-  //NS_LOG_DEBUG("Nrdv::Hello - Expected cmdMarker: " << routerTag);
   //NS_LOG_DEBUG("Nrdv::Hello - My name: " << m_routerName);
 
-  if (ExtractRouterTagFromHello(interestName) != routerTag) {
+  std::string neighPrefix = ExtractNeighborPrefixFromHello(interestName);
+  if (ExtractRouterTagFromHello(interestName) != kRouterTag) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
@@ -216,14 +215,31 @@ void Nrdv::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack
 void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data) {
   NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
 
+  /* Sanity checks */
+  std::string neighPrefix = ExtractNeighborPrefixFromHello(data.getName());
+  if (!isValidRouter(data.getName(), kNrdvDvInfoPrefix)) {
+    NS_LOG_INFO("Not a router, ignoring...");
+    return;
+  }
+  if (neighPrefix == m_routerPrefix) {
+    NS_LOG_INFO("DvInfo from myself, ignoring...");
+    return;
+  }
+
+  /* Overheard DvInfo */
+  if (!m_neighMap.count(neighPrefix)) {
+    NS_LOG_INFO("Overheard DvInfo!");
+    // TODO: mark some flag for future use
+    // TODO: insert on the neighborMap?
+  }
+
+  /* Security validation */
   if (data.getSignature().hasKeyLocator() &&
       data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
     NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
   }
-
   // TODO: validate data as in HelloProtocol::onContent (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
 
-  //NS_LOG_INFO("Extract DV-Info...");
   /* Extract DvInfo and process Distance Vector update */
   const auto& content = data.getContent();
   proto::DvInfo dvinfo_proto;
@@ -240,10 +256,65 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   //}
   //NS_LOG_INFO("Decoding...");
   auto dvinfo_other = DecodeDvInfo(dvinfo_proto);
-  for (auto entry : dvinfo_other) {
-    NS_LOG_INFO("DV-Info from neighbor prefix=" << entry.first << " seqNum=" << entry.second.GetSeqNum() << " cost=" << entry.second.GetCost());
-  }
+  processDvInfoFromNeighbor(neighPrefix, dvinfo_other);
   //NS_LOG_INFO("Done");
+}
+
+void
+Nrdv::processDvInfoFromNeighbor(std::string neighbor, DvInfoMap& dvinfo_other) {
+  NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor);
+  for (auto entry : dvinfo_other) {
+    std::string neigh_prefix = entry.first;
+    uint64_t neigh_seq = entry.second.GetSeqNum();
+    uint32_t neigh_cost = entry.second.GetCost();
+    NS_LOG_INFO("===>> prefix=" << neigh_prefix << " seqNum=" << neigh_seq << " cost=" << neigh_cost);
+
+    /* ignore our own name prefixes */
+    if (m_dvinfo.count(neigh_prefix))
+      continue;
+
+    /* insert new prefix with valid seqNum */
+    if (!m_dvinfoLearned.count(neigh_prefix) && neigh_seq > 0 && isValidCost(neigh_cost)) {
+      m_dvinfoLearned[neigh_prefix] = entry.second;
+      continue;
+    }
+
+    /* cost is "infinity", so remove it */
+    if (isInfinityCost(neigh_cost)) {
+      NS_LOG_INFO("======>> Infinity cost! Remove name prefix" << neigh_prefix);
+      // TODO: we may have other faces to this neighbor!
+      m_dvinfoLearned.erase(neigh_prefix);
+      // TODO: update fib
+    }
+
+    /* compare the Received and Local SeqNum */
+    auto& dvinfo_local = m_dvinfoLearned[neigh_prefix];
+    if (neigh_seq > dvinfo_local.GetSeqNum()) {
+      NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << dvinfo_local.GetSeqNum());
+      // TODO:
+      //   - Recv_Cost == Local_cost: update Local_SeqNum
+      //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
+    } else if (neigh_seq == dvinfo_local.GetSeqNum() && neigh_cost < dvinfo_local.GetCost()) {
+      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << dvinfo_local.GetCost());
+      // TODO: wait SettlingTime, then update Local_Cost
+    } else if (neigh_seq == dvinfo_local.GetSeqNum() && neigh_cost >= dvinfo_local.GetCost()) {
+      NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << dvinfo_local.GetCost());
+      // TODO: save this new prefix as well to multipath
+    } else {
+      /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
+      continue;
+    }
+  }
+}
+
+bool
+Nrdv::isValidCost(uint32_t cost) {
+  return cost > 0 && cost < std::numeric_limits<uint32_t>::max();
+}
+
+bool
+Nrdv::isInfinityCost(uint32_t cost) {
+  return cost == std::numeric_limits<uint32_t>::max();
 }
 
 } // namespace nrdv
