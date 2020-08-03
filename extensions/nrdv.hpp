@@ -117,44 +117,39 @@ private:
     m_routerPrefix = m_network;
     m_routerPrefix.append(m_routerName);
   }
-
-  /** @brief Extracts the neighbor prefix from a Hello Interest packet.
+  
+  /** @brief check if it is a valid router by extracting the router tag 
+   * (command marker) from Interest name and comparing with %C1.Router
    *
-   * \param interestName The interest name received on a Hello packet from
-   * a neighbor. It should be formatted:
-   *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
+   * @param name: The interest name received from a neighbor. It 
+   * should be formatted:
+   *    /NRDV/<type>/<network>/%C1.Router/<router_name>
+   * @param prefix: The prefix type: Hello, DvInfo or Key
    *
    * Example: 
-   *    Input: /NRDV/HELLO/ufba/%C1.Router/Router1
+   *    Input-name: /NRDV/HELLO/ufba/%C1.Router/Router1
+   *    Input-prefix: /NRDV/HELLO
+   *    Returns: true
+   */
+  bool isValidRouter(const Name& name, const Name& prefix) {
+    return name.get(prefix.size()+1).toUri() == kRouterTag;
+  }
+
+  /** @brief Extracts the router prefix from Interest packet
+   * of a specifc type.
+   *
+   * @param name: The interest name received from a neighbor. It 
+   * should be formatted:
+   *    /NRDV/<type>/<network>/%C1.Router/<router_name>
+   * @param prefix: The prefix type: Hello, DvInfo or Key
+   *
+   * Example 1: 
+   *    Input-name: /NRDV/HELLO/ufba/%C1.Router/Router1
+   *    Input-prefix: /NRDV/HELLO
    *    Returns: /ufba/%C1.Router/Router1
    */
-  std::string ExtractNeighborPrefixFromHello(const Name& n) {
-    return n.getSubName(kNrdvHelloPrefix.size(), 3).toUri();
-  }
-  
-  /** @brief Extracts the router tag (command marker) from Interest name
-   *
-   * \param interestName The interest name received on a Hello packet from
-   * a neighbor. It should be formatted:
-   *    /NRDV/HELLO/<network>/%C1.Router/<router_name>
-   *
-   * Example: 
-   *    Input: /NRDV/HELLO/ufba/%C1.Router/Router1
-   *    Returns: %C1.Router
-   *
-   */
-  std::string ExtractRouterTagFromHello(const Name& n) {
-    return n.get(-2).toUri();
-  }
-
-  bool isValidRouter(const Name& n, const Name& prefix) {
-    return n.get(prefix.size()+1).toUri() == kRouterTag;
-  }
-
-  /** @brief Extracts the router prefix from a DvInfo Interest packet.
-   */
-  std::string ExtractRouterPrefixFromDvInfo(const Name& n) {
-    return n.getSubName(kNrdvDvInfoPrefix.size(), 3).toUri();
+  std::string ExtractRouterPrefix(const Name& name, const Name& prefix) {
+    return name.getSubName(prefix.size(), 3).toUri();
   }
 
 private:

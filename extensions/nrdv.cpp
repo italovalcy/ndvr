@@ -143,14 +143,10 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
 
 void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   const ndn::Name interestName(interest.getName());
-
   NS_LOG_INFO("Received HELLO Interest " << interestName);
-  //NS_LOG_DEBUG("Nrdv::Hello - Received cmdMarker: " << ExtractRouterTagFromHello(interestName));
-  //NS_LOG_DEBUG("Nrdv::Hello - Received neighName: " << neighPrefix);
-  //NS_LOG_DEBUG("Nrdv::Hello - My name: " << m_routerName);
 
-  std::string neighPrefix = ExtractNeighborPrefixFromHello(interestName);
-  if (ExtractRouterTagFromHello(interestName) != kRouterTag) {
+  std::string neighPrefix = ExtractRouterPrefix(interestName, kNrdvHelloPrefix);
+  if (!isValidRouter(interestName, kNrdvHelloPrefix)) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
@@ -160,7 +156,7 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
   }
   if (m_neighMap.count(neighPrefix)) {
     NS_LOG_INFO("Already known router, ignoring...");
-    // exponetially increase the hellInterval until the maximum allowed
+    /* exponetially increase the helloInterval until the maximum allowed */
     m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
     return;
   }
@@ -174,7 +170,7 @@ void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
 
   // Sanity check
-  std::string routerPrefix = ExtractRouterPrefixFromDvInfo(interest.getName());
+  std::string routerPrefix = ExtractRouterPrefix(interest.getName(), kNrdvDvInfoPrefix);
   if (routerPrefix != m_routerPrefix) {
     NS_LOG_INFO("Interest is not to me, ignoring.. received_name=" << routerPrefix << " my_name=" << m_routerPrefix);
     return;
@@ -216,7 +212,7 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
 
   /* Sanity checks */
-  std::string neighPrefix = ExtractNeighborPrefixFromHello(data.getName());
+  std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNrdvDvInfoPrefix);
   if (!isValidRouter(data.getName(), kNrdvDvInfoPrefix)) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
