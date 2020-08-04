@@ -35,8 +35,9 @@ public:
   {
   }
 
-  NeighborEntry(std::string name, uint64_t ver)
+  NeighborEntry(std::string name, uint64_t faceId, uint64_t ver)
     : m_name(name)
+    , m_faceId(faceId)
     , m_version(ver)
   {
   }
@@ -64,8 +65,15 @@ public:
   uint64_t GetNextVersion() {
     return m_version++;
   }
+  void SetFaceId(uint64_t faceId) {
+    m_faceId = faceId;
+  }
+  uint64_t GetFaceId() {
+    return m_faceId;
+  }
 private:
   std::string m_name;
+  uint64_t m_faceId;
   uint64_t m_version;
   //TODO: lastSeen
   //TODO: key  
@@ -97,7 +105,7 @@ private:
   typedef std::map<std::string, NeighborEntry> NeighborMap;
 
   void processInterest(const ndn::Interest& interest);
-  void OnHelloInterest(const ndn::Interest& interest);
+  void OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId);
   void OnKeyInterest(const ndn::Interest& interest);
   void OnDvInfoInterest(const ndn::Interest& interest);
   void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
@@ -109,7 +117,7 @@ private:
   void printFib();
   bool isInfinityCost(uint32_t cost);
   bool isValidCost(uint32_t cost);
-  void processDvInfoFromNeighbor(std::string neighbor, DvInfoMap& dvinfo_other);
+  void processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other);
 
   void
   buildRouterPrefix()

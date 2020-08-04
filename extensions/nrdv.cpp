@@ -140,12 +140,16 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
    *  - https://redmine.named-data.net/projects/nfd/wiki/NDNLPv2#Incoming-Face-Indication
    */
   shared_ptr<lp::IncomingFaceIdTag> incomingFaceIdTag = interest.getTag<lp::IncomingFaceIdTag>();
-  uint64_t inFaceId = (incomingFaceIdTag != nullptr) ? *incomingFaceIdTag : 0;
+  if (incomingFaceIdTag == nullptr) {
+    NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
+    return;
+  }
+  uint64_t inFaceId = *incomingFaceIdTag;
   NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
 
   const ndn::Name interestName(interest.getName());
   if (kNrdvHelloPrefix.isPrefixOf(interestName))
-    return OnHelloInterest(interest);
+    return OnHelloInterest(interest, inFaceId);
   else if (kNrdvDvInfoPrefix.isPrefixOf(interestName))
     return OnDvInfoInterest(interest);
   else if (kNrdvKeyPrefix.isPrefixOf(interestName))
@@ -154,7 +158,7 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Unknown Interest " << interestName);
 }
 
-void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
+void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   const ndn::Name interestName(interest.getName());
   NS_LOG_INFO("Received HELLO Interest " << interestName);
 
@@ -174,7 +178,7 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest) {
     return;
   }
   m_helloIntervalCur = m_helloIntervalIni;
-  NeighborEntry neigh(neighPrefix, 0);
+  NeighborEntry neigh(neighPrefix, inFaceId, 0);
   m_neighMap[neighPrefix] = neigh;
   SendDvInfoInterest(neigh);
 }
@@ -236,7 +240,8 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   }
 
   /* Overheard DvInfo */
-  if (!m_neighMap.count(neighPrefix)) {
+  auto neigh_it = m_neighMap.find(neighPrefix);
+  if (neigh_it == m_neighMap.end()) {
     NS_LOG_INFO("Overheard DvInfo!");
     // TODO: mark some flag for future use
     // TODO: insert on the neighborMap?
@@ -265,13 +270,13 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   //}
   //NS_LOG_INFO("Decoding...");
   auto dvinfo_other = DecodeDvInfo(dvinfo_proto);
-  processDvInfoFromNeighbor(neighPrefix, dvinfo_other);
+  processDvInfoFromNeighbor(neigh_it->second, dvinfo_other);
   //NS_LOG_INFO("Done");
 }
 
 void
-Nrdv::processDvInfoFromNeighbor(std::string neighbor, DvInfoMap& dvinfo_other) {
-  NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor);
+Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other) {
+  NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor.GetName());
   for (auto entry : dvinfo_other) {
     std::string neigh_prefix = entry.first;
     uint64_t neigh_seq = entry.second.GetSeqNum();
