@@ -8,6 +8,7 @@
 #include <ns3/node.h>
 #include <ns3/node-list.h>
 #include <ns3/ndnSIM/helper/ndn-stack-helper.hpp>
+#include <ndn-cxx/lp/tags.hpp>
 
 NS_LOG_COMPONENT_DEFINE("ndn.Nrdv");
 
@@ -130,6 +131,18 @@ Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
 }
 
 void Nrdv::processInterest(const ndn::Interest& interest) {
+  /** Incoming Face Indication
+   * NDNLPv2 says "Incoming face indication feature allows the forwarder to inform local applications
+   * about the face on which a packet is received." and also warns "application MUST be prepared to
+   * receive a packet without IncomingFaceId field". From our tests, only internal faces seems to not
+   * initialize it and this can even be used to filter out our own interests. See more:
+   *  - FibManager::setFaceForSelfRegistration (ndnSIM/NFD/daemon/mgmt/fib-manager.cpp)
+   *  - https://redmine.named-data.net/projects/nfd/wiki/NDNLPv2#Incoming-Face-Indication
+   */
+  shared_ptr<lp::IncomingFaceIdTag> incomingFaceIdTag = interest.getTag<lp::IncomingFaceIdTag>();
+  uint64_t inFaceId = (incomingFaceIdTag != nullptr) ? *incomingFaceIdTag : 0;
+  NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
+
   const ndn::Name interestName(interest.getName());
   if (kNrdvHelloPrefix.isPrefixOf(interestName))
     return OnHelloInterest(interest);
