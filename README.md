@@ -43,7 +43,7 @@ After follow the steps for building the code, you can run NRDV as the following:
     NS_LOG=ndn.Nrdv ./waf --run ndn-nrdv-grid-3
 
 The above command will run in verbose mode, showing lots of information from the 
-protocol. TO just run the code without debug:
+protocol. To just run the code without debug:
 
     ./waf --run ndn-nrdv-grid-3
 
