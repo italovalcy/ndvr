@@ -3,8 +3,8 @@ NRDV
 
 NRDV (Named-data Routing via Distance Vector) is routing protocol for NDN. More details soon.
 
-Build and run
-=============
+Building
+========
 
 Custom version of NS-3 and specified version of ndnSIM needs to be installed.
 
@@ -33,7 +33,22 @@ The code should also work with the latest version of ndnSIM, but it is not guara
     cd nrdv
 
     PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH ./waf configure --debug
-    ./waf --run ndn-nrdv-simple
+
+
+Running
+=======
+
+After follow the steps for building the code, you can run NRDV as the following:
+
+    NS_LOG=ndn.Nrdv ./waf --run ndn-nrdv-grid-3
+
+The above command will run in verbose mode, showing lots of information from the 
+protocol. TO just run the code without debug:
+
+    ./waf --run ndn-nrdv-grid-3
+
+More information
+================
 
 For more information how to install NS-3 and ndnSIM, please refer to http://ndnsim.net website.
 
