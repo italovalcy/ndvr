@@ -31,8 +31,8 @@ The code should also work with the latest version of ndnSIM, but it is not guara
     cd ..
     git clone https://github.com/italovalcy/nrdv
     cd nrdv
-
     PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH ./waf configure --debug
+    ./waf
 
 
 Running
