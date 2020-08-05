@@ -13,10 +13,16 @@ public:
   {
   }
 
-  DvInfoEntry(std::string name, uint64_t seqNum, uint32_t cost)
+  DvInfoEntry(std::string name, uint64_t seqNum, uint32_t cost, uint64_t faceId)
     : m_name(name)
     , m_seqNum(seqNum)
     , m_cost(cost)
+    , m_faceId(faceId)
+  {
+  }
+
+  DvInfoEntry(std::string name, uint64_t seqNum, uint32_t cost)
+    : DvInfoEntry(name, seqNum, cost, 0)
   {
   }
 
@@ -48,10 +54,19 @@ public:
     return m_cost;
   }
 
+  void SetFaceId(uint64_t faceId) {
+    m_faceId = faceId;
+  }
+
+  uint64_t GetFaceId() {
+    return m_faceId;
+  }
+
 private:
   std::string m_name;
   uint64_t m_seqNum;
   uint32_t m_cost;
+  uint64_t m_faceId;
 };
 
 /**

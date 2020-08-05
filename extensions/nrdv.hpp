@@ -118,6 +118,7 @@ private:
   bool isInfinityCost(uint32_t cost);
   bool isValidCost(uint32_t cost);
   void processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other);
+  uint32_t updateCostToNeigh(NeighborEntry&, uint32_t cost);
 
   void
   buildRouterPrefix()
