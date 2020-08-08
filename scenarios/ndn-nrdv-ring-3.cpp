@@ -58,7 +58,7 @@ main(int argc, char* argv[])
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
   }
 
-  Simulator::Stop(Seconds(20.0));
+  Simulator::Stop(Seconds(120.0));
 
   Simulator::Run();
   Simulator::Destroy();
