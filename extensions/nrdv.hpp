@@ -23,7 +23,7 @@ namespace ndn {
 namespace nrdv {
 
 static const Name kNrdvPrefix = Name("/nrdv");
-static const Name kNrdvHelloPrefix = Name("/nrdv/hello");
+static const Name kNrdvHelloPrefix = Name("/nrdv/ehlo");
 static const Name kNrdvDvInfoPrefix = Name("/nrdv/dvinfo");
 static const Name kNrdvKeyPrefix = Name("/nrdv/key");
 static const std::string kRouterTag = "\%C1.Router";
@@ -119,6 +119,8 @@ private:
   bool isValidCost(uint32_t cost);
   void processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other);
   uint32_t updateCostToNeigh(NeighborEntry&, uint32_t cost);
+  void IncreaseHelloInterval();
+  void ResetHelloInterval();
 
   void
   buildRouterPrefix()
@@ -179,6 +181,9 @@ private:
   int m_helloIntervalMax;
   int m_dvinfoInterval;
   int m_dvinfoTimeout;
+
+  scheduler::EventId sendhello_event;  /* async send hello event scheduler */
+  scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
 };
 
 } // namespace nrdv

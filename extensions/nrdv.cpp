@@ -40,7 +40,8 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<s
 
   buildRouterPrefix();
   registerPrefixes();
-  ns3::Simulator::Schedule(ns3::Seconds(1.0), &Nrdv::printFib, this);
+  m_scheduler.schedule(ndn::time::seconds(1),
+                        [this] { printFib(); });
 }
 
 void Nrdv::Start() {
@@ -93,6 +94,9 @@ Nrdv::registerPrefixes() {
 
 void
 Nrdv::SendHelloInterest() {
+  /* First of all, cancel any previously scheduled events */
+  sendhello_event.cancel();
+
   Name name = Name(kNrdvHelloPrefix);
   name.append(getRouterPrefix());
   NS_LOG_INFO("Sending Interest " << name);
@@ -107,7 +111,8 @@ Nrdv::SendHelloInterest() {
                         [](const Interest&, const lp::Nack&) {},
                         [](const Interest&) {});
 
-  ns3::Simulator::Schedule(ns3::Seconds(m_helloIntervalCur), &Nrdv::SendHelloInterest, this);
+  sendhello_event = m_scheduler.schedule(time::seconds(m_helloIntervalCur),
+                                        [this] { SendHelloInterest(); });
 }
 
 void
@@ -128,7 +133,8 @@ Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
     std::bind(&Nrdv::OnDvInfoNack, this, _1, _2),
     std::bind(&Nrdv::OnDvInfoTimedOut, this, _1));
 
-  ns3::Simulator::Schedule(ns3::Seconds(m_dvinfoInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
+  // Not necessary anymore, since the DvInfo is sent on demand (when receiving an ehlo)
+  //ns3::Simulator::Schedule(ns3::Seconds(m_dvinfoInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
 }
 
 void Nrdv::processInterest(const ndn::Interest& interest) {
@@ -159,6 +165,21 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Unknown Interest " << interestName);
 }
 
+void Nrdv::IncreaseHelloInterval() {
+  /* exponetially increase the helloInterval until the maximum allowed */
+  if (increasehellointerval_event)
+    return;
+  increasehellointerval_event = m_scheduler.schedule(time::seconds(1),
+      [this] {
+        m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
+      });
+}
+
+void Nrdv::ResetHelloInterval() {
+  increasehellointerval_event.cancel();
+  m_helloIntervalCur = m_helloIntervalIni;
+}
+
 void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   const ndn::Name interestName(interest.getName());
   NS_LOG_INFO("Received HELLO Interest " << interestName);
@@ -172,16 +193,16 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
     NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
-  if (m_neighMap.count(neighPrefix)) {
-    NS_LOG_INFO("Already known router, ignoring...");
-    /* exponetially increase the helloInterval until the maximum allowed */
-    m_helloIntervalCur = (2*m_helloIntervalCur > m_helloIntervalMax) ? m_helloIntervalMax : 2*m_helloIntervalCur;
-    return;
+  auto neigh = m_neighMap.find(neighPrefix);
+  if (neigh == m_neighMap.end()) {
+    ResetHelloInterval();
+    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
+  } else {
+    NS_LOG_INFO("Already known router, increasing the hello interval");
+    IncreaseHelloInterval();
+    //return;
   }
-  m_helloIntervalCur = m_helloIntervalIni;
-  NeighborEntry neigh(neighPrefix, inFaceId, 0);
-  m_neighMap[neighPrefix] = neigh;
-  SendDvInfoInterest(neigh);
+  SendDvInfoInterest(neigh->second);
 }
 
 void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
@@ -296,6 +317,10 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
       entry.second.SetFaceId(neighbor.GetFaceId());
       //m_dvinfoLearned[neigh_prefix] = DvInfoEntry(neigh_prefix, neigh_seq, neigh_cost, neighbor.GetFaceId());
       m_dvinfoLearned[neigh_prefix] = entry.second;
+
+      /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
+      ResetHelloInterval();
+      SendHelloInterest();
       continue;
     }
 
@@ -305,6 +330,11 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
       // TODO: we may have other faces to this neighbor!
       m_dvinfoLearned.erase(neigh_prefix);
       // TODO: update fib
+
+      /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
+      ResetHelloInterval();
+      SendHelloInterest();
+      continue;
     }
 
     /* compare the Received and Local SeqNum */
@@ -331,7 +361,7 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
       dvinfo_local.SetFaceId(neighbor.GetFaceId());
       dvinfoUpdated = true;
     } else if (neigh_seq == dvinfo_local.GetSeqNum() && neigh_cost >= dvinfo_local.GetCost()) {
-      NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << dvinfo_local.GetCost());
+      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << dvinfo_local.GetCost());
       // TODO: save this new prefix as well to multipath
     } else {
       /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
