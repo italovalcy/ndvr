@@ -313,7 +313,7 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
     /* insert new prefix with valid seqNum */
     if (!m_dvinfoLearned.count(neigh_prefix) && neigh_seq > 0 && isValidCost(neigh_cost)) {
       NS_LOG_INFO("======>> New prefix! Just insert it");
-      entry.second.SetCost(updateCostToNeigh(neighbor, neigh_cost));
+      entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
       entry.second.SetFaceId(neighbor.GetFaceId());
       //m_dvinfoLearned[neigh_prefix] = DvInfoEntry(neigh_prefix, neigh_seq, neigh_cost, neighbor.GetFaceId());
       m_dvinfoLearned[neigh_prefix] = entry.second;
@@ -339,7 +339,7 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
 
     /* compare the Received and Local SeqNum */
     auto& dvinfo_local = m_dvinfoLearned[neigh_prefix];
-    neigh_cost = updateCostToNeigh(neighbor, neigh_cost);
+    neigh_cost = CalculateCostToNeigh(neighbor, neigh_cost);
     if (neigh_seq > dvinfo_local.GetSeqNum()) {
       NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << dvinfo_local.GetSeqNum());
       // TODO:
@@ -376,7 +376,7 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
 }
 
 uint32_t
-Nrdv::updateCostToNeigh(NeighborEntry& neighbor, uint32_t cost) {
+Nrdv::CalculateCostToNeigh(NeighborEntry& neighbor, uint32_t cost) {
   return cost+1;
 }
 
