@@ -112,7 +112,7 @@ Nrdv::SendHelloInterest() {
 
 void
 Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
-  //NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
+  NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
   Name nameWithSequence = Name(kNrdvDvInfoPrefix);
   nameWithSequence.append(neighbor.GetName());
   nameWithSequence.appendSequenceNumber(neighbor.GetNextVersion());
@@ -185,7 +185,7 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
 }
 
 void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
-  //NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
+  NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
 
   // Sanity check
   std::string routerPrefix = ExtractRouterPrefix(interest.getName(), kNrdvDvInfoPrefix);
@@ -200,7 +200,7 @@ void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
   // Set dvinfo
   std::string dvinfo_str;
   EncodeDvInfo(m_dvinfoLearned, dvinfo_str);
-  //NS_LOG_INFO("Sending DV-Info encoded: size=" << dvinfo_str.size());
+  NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
   // Sign and send
@@ -227,7 +227,7 @@ void Nrdv::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack
 }
 
 void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data) {
-  //NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
+  NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
 
   /* Sanity checks */
   std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNrdvDvInfoPrefix);
@@ -251,7 +251,7 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   /* Security validation */
   if (data.getSignature().hasKeyLocator() &&
       data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
-    //NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
   }
   // TODO: validate data as in HelloProtocol::onContent (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
 
