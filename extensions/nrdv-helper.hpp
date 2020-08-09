@@ -6,37 +6,38 @@
 namespace ndn {
 namespace nrdv {
 
-inline void EncodeDvInfo(const DvInfoMap& v, proto::DvInfo* dvinfo_proto) {
-  for (auto item: v) {
+inline void EncodeDvInfo(RoutingTable& v, proto::DvInfo* dvinfo_proto) {
+  for (auto it = v.begin(); it != v.end(); ++it) {
     auto* entry = dvinfo_proto->add_entry();
-    entry->set_prefix(item.first);
-    entry->set_seq(item.second.GetSeqNum());
-    entry->set_cost(item.second.GetCost());
+    entry->set_prefix(it->first);
+    entry->set_seq(it->second.GetSeqNum());
+    entry->set_cost(it->second.GetCost());
   }
 }
 
-inline void EncodeDvInfo(const DvInfoMap& v, std::string& out) {
+inline void EncodeDvInfo(RoutingTable& v, std::string& out) {
   proto::DvInfo dvinfo_proto;
   EncodeDvInfo(v, &dvinfo_proto);
   dvinfo_proto.AppendToString(&out);
 }
 
-inline DvInfoMap DecodeDvInfo(const proto::DvInfo& dvinfo_proto) {
-  DvInfoMap dvinfo;
+inline RoutingTable DecodeDvInfo(const proto::DvInfo& dvinfo_proto) {
+  RoutingTable dvinfo;
   for (int i = 0; i < dvinfo_proto.entry_size(); ++i) {
     const auto& entry = dvinfo_proto.entry(i);
     auto prefix = entry.prefix();
     auto seq = entry.seq();
     auto cost = entry.cost();
-    dvinfo[prefix] = DvInfoEntry(prefix, seq, cost);
+    RoutingEntry re = RoutingEntry(prefix, seq, cost);
+    dvinfo.insert(re);
   }
   return dvinfo;
 }
 
-inline DvInfoMap DecodeDvInfo(const void* buf, size_t buf_size) {
+inline RoutingTable DecodeDvInfo(const void* buf, size_t buf_size) {
   proto::DvInfo dvinfo_proto;
   if (!dvinfo_proto.ParseFromArray(buf, buf_size)) {
-    DvInfoMap res;
+    RoutingTable res;
     return res;
   }
   return DecodeDvInfo(dvinfo_proto);

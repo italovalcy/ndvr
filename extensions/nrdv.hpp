@@ -15,7 +15,7 @@
 #include <ns3/core-module.h>
 #include <ns3/random-variable-stream.h>
 
-#include "dvinfo.hpp"
+#include "routing-table.hpp"
 #include "nrdv-message.pb.h"
 #include "nrdv-helper.hpp"
 
@@ -117,7 +117,7 @@ private:
   void printFib();
   bool isInfinityCost(uint32_t cost);
   bool isValidCost(uint32_t cost);
-  void processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other);
+  void processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& dvinfo_other);
   uint32_t CalculateCostToNeigh(NeighborEntry&, uint32_t cost);
   void IncreaseHelloInterval();
   void ResetHelloInterval();
@@ -174,13 +174,12 @@ private:
 
   Name m_routerPrefix;
   NeighborMap m_neighMap;
-  DvInfoMap m_dvinfo;
-  DvInfoMap m_dvinfoLearned;
+  RoutingTable m_routingTable;
   int m_helloIntervalIni;
   int m_helloIntervalCur;
   int m_helloIntervalMax;
-  int m_dvinfoInterval;
-  int m_dvinfoTimeout;
+  int m_localRTInterval;
+  int m_localRTTimeout;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */

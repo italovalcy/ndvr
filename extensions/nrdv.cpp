@@ -25,13 +25,16 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<s
   , m_helloIntervalIni(1)
   , m_helloIntervalCur(1)
   , m_helloIntervalMax(60)
-  , m_dvinfoInterval(1)
-  , m_dvinfoTimeout(1)
+  , m_localRTInterval(1)
+  , m_localRTTimeout(1)
 {
   for (std::vector<std::string>::iterator it = npv.begin() ; it != npv.end(); ++it) {
-    DvInfoEntry dvinfoEntry(*it, 1, 0, 0);
-    m_dvinfo[*it] = dvinfoEntry;
-    m_dvinfoLearned[*it] = dvinfoEntry;
+    RoutingEntry routingEntry;
+    routingEntry.SetName(*it);
+    routingEntry.SetSeqNum(1);
+    routingEntry.SetCost(0);
+    routingEntry.SetFaceId(0); /* directly connected */
+    m_routingTable.insert(routingEntry);
   }
   m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
@@ -126,7 +129,7 @@ Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
   interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
   interest.setName(nameWithSequence);
   interest.setCanBePrefix(false);
-  interest.setInterestLifetime(time::seconds(m_dvinfoTimeout));
+  interest.setInterestLifetime(time::seconds(m_localRTTimeout));
 
   m_face.expressInterest(interest,
     std::bind(&Nrdv::OnDvInfoContent, this, _1, _2),
@@ -134,7 +137,7 @@ Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
     std::bind(&Nrdv::OnDvInfoTimedOut, this, _1));
 
   // Not necessary anymore, since the DvInfo is sent on demand (when receiving an ehlo)
-  //ns3::Simulator::Schedule(ns3::Seconds(m_dvinfoInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
+  //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
 }
 
 void Nrdv::processInterest(const ndn::Interest& interest) {
@@ -220,7 +223,7 @@ void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
   std::string dvinfo_str;
-  EncodeDvInfo(m_dvinfoLearned, dvinfo_str);
+  EncodeDvInfo(m_routingTable, dvinfo_str);
   NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
@@ -243,7 +246,7 @@ void Nrdv::OnDvInfoTimedOut(const ndn::Interest& interest) {
 void Nrdv::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
   NS_LOG_DEBUG("Received Nack with reason: " << nack.getReason());
   // should we treat as a timeout? should the Nack represent no changes on neigh DvInfo?
-  //m_scheduler.schedule(ndn::time::seconds(m_dvinfoInterval),
+  //m_scheduler.schedule(ndn::time::seconds(m_localRTInterval),
   //  [this, interest] { processInterestTimedOut(interest); });
 }
 
@@ -291,32 +294,31 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   //  NS_LOG_INFO("DV-Info from neighbor prefix=" << entry.prefix() << " seqNum=" << entry.seq() << " cost=" << entry.cost());
   //}
   //NS_LOG_INFO("Decoding...");
-  auto dvinfo_other = DecodeDvInfo(dvinfo_proto);
-  processDvInfoFromNeighbor(neigh_it->second, dvinfo_other);
+  auto otherRT = DecodeDvInfo(dvinfo_proto);
+  processDvInfoFromNeighbor(neigh_it->second, otherRT);
   //NS_LOG_INFO("Done");
 }
 
 void
-Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other) {
+Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) {
   NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor.GetName());
-  bool dvinfoUpdated = false;
-  for (auto entry : dvinfo_other) {
+  for (auto entry : otherRT) {
     std::string neigh_prefix = entry.first;
     uint64_t neigh_seq = entry.second.GetSeqNum();
     uint32_t neigh_cost = entry.second.GetCost();
     NS_LOG_INFO("===>> prefix=" << neigh_prefix << " seqNum=" << neigh_seq << " recvCost=" << neigh_cost);
 
-    /* ignore our own name prefixes */
-    if (m_dvinfo.count(neigh_prefix))
+    /* Sanity checks: 1) ignore our own name prefixes (direct route); 2) ignore invalid seqNum; 3) ignore invalid Cost */
+    if (m_routingTable.isDirectRoute(neigh_prefix) || neigh_seq <= 0 || !isValidCost(neigh_cost))
       continue;
 
-    /* insert new prefix with valid seqNum */
-    if (!m_dvinfoLearned.count(neigh_prefix) && neigh_seq > 0 && isValidCost(neigh_cost)) {
+    /* insert new prefix */
+    RoutingEntry localRE;
+    if (!m_routingTable.LookupRoute(neigh_prefix, localRE)) {
       NS_LOG_INFO("======>> New prefix! Just insert it");
       entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
       entry.second.SetFaceId(neighbor.GetFaceId());
-      //m_dvinfoLearned[neigh_prefix] = DvInfoEntry(neigh_prefix, neigh_seq, neigh_cost, neighbor.GetFaceId());
-      m_dvinfoLearned[neigh_prefix] = entry.second;
+      m_routingTable.AddRoute(entry.second);
 
       /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
       ResetHelloInterval();
@@ -326,10 +328,12 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
 
     /* cost is "infinity", so remove it */
     if (isInfinityCost(neigh_cost)) {
+      /* Delete route only if update was received from my nexthop neighbor */
+      if (!localRE.isNextHop(neighbor.GetFaceId()))
+        continue;
+
       NS_LOG_INFO("======>> Infinity cost! Remove name prefix" << neigh_prefix);
-      // TODO: we may have other faces to this neighbor!
-      m_dvinfoLearned.erase(neigh_prefix);
-      // TODO: update fib
+      m_routingTable.DeleteRoute(localRE, neighbor.GetFaceId());
 
       /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
       ResetHelloInterval();
@@ -337,41 +341,33 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, DvInfoMap& dvinfo_other
       continue;
     }
 
-    /* compare the Received and Local SeqNum */
-    auto& dvinfo_local = m_dvinfoLearned[neigh_prefix];
+    /* compare the Received and Local SeqNum (in Routing Entry)*/
     neigh_cost = CalculateCostToNeigh(neighbor, neigh_cost);
-    if (neigh_seq > dvinfo_local.GetSeqNum()) {
-      NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << dvinfo_local.GetSeqNum());
+    if (neigh_seq > localRE.GetSeqNum()) {
+      NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << localRE.GetSeqNum());
       // TODO:
       //   - Recv_Cost == Local_cost: update Local_SeqNum
       //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
-      if (dvinfo_local.GetCost() == neigh_cost) {
+      if (localRE.GetCost() == neigh_cost) {
         // TODO: what if they have the same cost by differente faces?
-        dvinfo_local.SetSeqNum(neigh_seq);
+        localRE.SetSeqNum(neigh_seq);
       } else {
-        dvinfo_local.SetCost(neigh_cost);
-        dvinfo_local.SetFaceId(neighbor.GetFaceId());
-        dvinfo_local.SetSeqNum(neigh_seq);
-        dvinfoUpdated = true;
+        localRE.SetCost(neigh_cost);
+        localRE.SetFaceId(neighbor.GetFaceId());
+        localRE.SetSeqNum(neigh_seq);
       }
-    } else if (neigh_seq == dvinfo_local.GetSeqNum() && neigh_cost < dvinfo_local.GetCost()) {
-      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << dvinfo_local.GetCost());
+    } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost < localRE.GetCost()) {
+      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE.GetCost());
       // TODO: wait SettlingTime, then update Local_Cost
-      dvinfo_local.SetCost(neigh_cost);
-      dvinfo_local.SetFaceId(neighbor.GetFaceId());
-      dvinfoUpdated = true;
-    } else if (neigh_seq == dvinfo_local.GetSeqNum() && neigh_cost >= dvinfo_local.GetCost()) {
-      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << dvinfo_local.GetCost());
+      localRE.SetCost(neigh_cost);
+      localRE.SetFaceId(neighbor.GetFaceId());
+    } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost >= localRE.GetCost()) {
+      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE.GetCost());
       // TODO: save this new prefix as well to multipath
     } else {
       /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
       continue;
     }
-  }
-
-  if (dvinfoUpdated) {
-    // TODO: apply changes to the FIB
-    NS_LOG_INFO("==> Update FIB from Distance Vector Updates");
   }
 }
 

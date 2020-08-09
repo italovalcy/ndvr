@@ -1,0 +1,115 @@
+#ifndef _ROUTINGTABLE_H_
+#define _ROUTINGTABLE_H_
+
+#include <map>
+
+
+namespace ndn {
+namespace nrdv {
+
+class RoutingEntry {
+public:
+  RoutingEntry()
+  {
+  }
+
+  RoutingEntry(std::string name, uint64_t seqNum, uint32_t cost, uint64_t faceId)
+    : m_name(name)
+    , m_seqNum(seqNum)
+    , m_cost(cost)
+    , m_faceId(faceId)
+  {
+  }
+
+  RoutingEntry(std::string name, uint64_t seqNum, uint32_t cost)
+    : RoutingEntry(name, seqNum, cost, 0)
+  {
+  }
+
+  ~RoutingEntry()
+  {
+  }
+
+  void SetName(std::string name) {
+    m_name = name;
+  }
+
+  std::string GetName() {
+    return m_name;
+  }
+
+  void SetSeqNum(uint64_t seqNum) {
+    m_seqNum = seqNum;
+  }
+
+  uint64_t GetSeqNum() {
+    return m_seqNum;
+  }
+
+  void SetCost(uint32_t cost) {
+    m_cost = cost;
+  }
+
+  uint32_t GetCost() {
+    return m_cost;
+  }
+
+  void SetFaceId(uint64_t faceId) {
+    m_faceId = faceId;
+  }
+
+  uint64_t GetFaceId() {
+    return m_faceId;
+  }
+
+  bool isNextHop(uint64_t faceId) {
+    // TODO: in case of multipath, we may need to compare with a list of faces
+    return faceId == m_faceId;
+  }
+
+private:
+  std::string m_name;
+  uint64_t m_seqNum;
+  uint32_t m_cost;
+  uint64_t m_faceId;
+};
+
+/**
+ * @brief represents the Distance Vector information
+ *
+ *   The Distance Vector Information contains a collection of Routes (ie,
+ *   Name Prefixes), Cost and Sequence Number, each represents a piece of 
+ *   dynamic routing information learned from neighbors.
+ *
+ *   TODO: Routes associated with the same namespace are collected 
+ *   into a RIB entry.
+ */
+//class RoutingTable : public std::map<std::string, RoutingEntry> {
+class RoutingTable {
+public:
+  std::map<std::string, RoutingEntry> m_rt;
+
+  RoutingTable() {}
+  ~RoutingTable() {}
+
+  void UpdateRoute(RoutingEntry& e);
+  void AddRoute(RoutingEntry& e);
+  void DeleteRoute(RoutingEntry& e, uint64_t nh);
+  bool isDirectRoute(std::string n);
+  bool LookupRoute(std::string n);
+  bool LookupRoute(std::string n, RoutingEntry& e);
+  void insert(RoutingEntry& e);
+
+  // just forward some methods
+  decltype(m_rt.begin()) begin() { return m_rt.begin(); }
+  decltype(m_rt.end()) end() { return m_rt.end(); }
+  decltype(m_rt.size()) size() { return m_rt.size(); }
+private:
+  void unregisterPrefix(std::string name, uint64_t faceId);
+  void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
+};
+
+} // namespace nrdv
+} // namespace ndn
+
+#endif // _ROUTINGTABLE_H_
