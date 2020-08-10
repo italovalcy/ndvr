@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
-#include "nrdv-app.hpp"
+#include "ndvr-app.hpp"
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -9,7 +9,7 @@
 
 namespace ns3 {
 
-NS_OBJECT_ENSURE_REGISTERED(NrdvApp);
+NS_OBJECT_ENSURE_REGISTERED(NdvrApp);
 
 int
 main(int argc, char* argv[])
@@ -22,7 +22,7 @@ main(int argc, char* argv[])
   ndn::StackHelper ndnHelper;
   ndnHelper.Install(node);
 
-  ndn::AppHelper appHelper("NrdvApp");
+  ndn::AppHelper appHelper("NdvrApp");
   appHelper.SetAttribute("Network", StringValue("/ndn"));
   appHelper.SetAttribute("RouterName", StringValue("/\%C1.Router/RouterA"));
   appHelper.Install(node)

@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
-#include "nrdv.hpp"
+#include "ndvr.hpp"
 #include <limits>
 #include <ns3/simulator.h>
 #include <ns3/log.h>
@@ -10,12 +10,12 @@
 #include <ns3/ndnSIM/helper/ndn-stack-helper.hpp>
 #include <ndn-cxx/lp/tags.hpp>
 
-NS_LOG_COMPONENT_DEFINE("ndn.Nrdv");
+NS_LOG_COMPONENT_DEFINE("ndn.Ndvr");
 
 namespace ndn {
-namespace nrdv {
+namespace ndvr {
 
-Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& npv)
+Ndvr::Ndvr(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& npv)
   : m_keyChain(keyChain)
   , m_scheduler(m_face.getIoService())
   , m_seq(0)
@@ -36,7 +36,7 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<s
     routingEntry.SetFaceId(0); /* directly connected */
     m_routingTable.insert(routingEntry);
   }
-  m_face.setInterestFilter(kNrdvPrefix, std::bind(&Nrdv::processInterest, this, _2),
+  m_face.setInterestFilter(kNdvrPrefix, std::bind(&Ndvr::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);
   });
@@ -47,18 +47,18 @@ Nrdv::Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<s
                         [this] { printFib(); });
 }
 
-void Nrdv::Start() {
+void Ndvr::Start() {
   SendHelloInterest();
 }
 
-void Nrdv::Stop() {
+void Ndvr::Stop() {
 }
 
-void Nrdv::run() {
+void Ndvr::run() {
   m_face.processEvents();
 }
 
-void Nrdv::printFib() {
+void Ndvr::printFib() {
   using namespace ns3;
   using namespace ns3::ndn;
 
@@ -73,7 +73,7 @@ void Nrdv::printFib() {
 }
 
 void
-Nrdv::registerPrefixes() {
+Ndvr::registerPrefixes() {
   using namespace ns3;
   using namespace ns3::ndn;
 
@@ -89,18 +89,18 @@ Nrdv::registerPrefixes() {
     auto face = ndn->getFaceByNetDevice(device);
     NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
 
-    NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNrdvPrefix << " via faceId=" << face->getId());
-    FibHelper::AddRoute(thisNode, kNrdvPrefix, face, metric);
+    NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
+    FibHelper::AddRoute(thisNode, kNdvrPrefix, face, metric);
   }
 
 }
 
 void
-Nrdv::SendHelloInterest() {
+Ndvr::SendHelloInterest() {
   /* First of all, cancel any previously scheduled events */
   sendhello_event.cancel();
 
-  Name name = Name(kNrdvHelloPrefix);
+  Name name = Name(kNdvrHelloPrefix);
   name.append(getRouterPrefix());
   NS_LOG_INFO("Sending Interest " << name);
 
@@ -119,9 +119,9 @@ Nrdv::SendHelloInterest() {
 }
 
 void
-Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
+Ndvr::SendDvInfoInterest(NeighborEntry& neighbor) {
   NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
-  Name nameWithSequence = Name(kNrdvDvInfoPrefix);
+  Name nameWithSequence = Name(kNdvrDvInfoPrefix);
   nameWithSequence.append(neighbor.GetName());
   nameWithSequence.appendSequenceNumber(neighbor.GetNextVersion());
 
@@ -132,15 +132,15 @@ Nrdv::SendDvInfoInterest(NeighborEntry& neighbor) {
   interest.setInterestLifetime(time::seconds(m_localRTTimeout));
 
   m_face.expressInterest(interest,
-    std::bind(&Nrdv::OnDvInfoContent, this, _1, _2),
-    std::bind(&Nrdv::OnDvInfoNack, this, _1, _2),
-    std::bind(&Nrdv::OnDvInfoTimedOut, this, _1));
+    std::bind(&Ndvr::OnDvInfoContent, this, _1, _2),
+    std::bind(&Ndvr::OnDvInfoNack, this, _1, _2),
+    std::bind(&Ndvr::OnDvInfoTimedOut, this, _1));
 
   // Not necessary anymore, since the DvInfo is sent on demand (when receiving an ehlo)
-  //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Nrdv::SendDvInfoInterest, this, neighbor);
+  //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Ndvr::SendDvInfoInterest, this, neighbor);
 }
 
-void Nrdv::processInterest(const ndn::Interest& interest) {
+void Ndvr::processInterest(const ndn::Interest& interest) {
   /** Incoming Face Indication
    * NDNLPv2 says "Incoming face indication feature allows the forwarder to inform local applications
    * about the face on which a packet is received." and also warns "application MUST be prepared to
@@ -158,17 +158,17 @@ void Nrdv::processInterest(const ndn::Interest& interest) {
   //NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
 
   const ndn::Name interestName(interest.getName());
-  if (kNrdvHelloPrefix.isPrefixOf(interestName))
+  if (kNdvrHelloPrefix.isPrefixOf(interestName))
     return OnHelloInterest(interest, inFaceId);
-  else if (kNrdvDvInfoPrefix.isPrefixOf(interestName))
+  else if (kNdvrDvInfoPrefix.isPrefixOf(interestName))
     return OnDvInfoInterest(interest);
-  else if (kNrdvKeyPrefix.isPrefixOf(interestName))
+  else if (kNdvrKeyPrefix.isPrefixOf(interestName))
     return OnKeyInterest(interest);
 
   NS_LOG_INFO("Unknown Interest " << interestName);
 }
 
-void Nrdv::IncreaseHelloInterval() {
+void Ndvr::IncreaseHelloInterval() {
   /* exponetially increase the helloInterval until the maximum allowed */
   if (increasehellointerval_event)
     return;
@@ -178,17 +178,17 @@ void Nrdv::IncreaseHelloInterval() {
       });
 }
 
-void Nrdv::ResetHelloInterval() {
+void Ndvr::ResetHelloInterval() {
   increasehellointerval_event.cancel();
   m_helloIntervalCur = m_helloIntervalIni;
 }
 
-void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
+void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   const ndn::Name interestName(interest.getName());
   NS_LOG_INFO("Received HELLO Interest " << interestName);
 
-  std::string neighPrefix = ExtractRouterPrefix(interestName, kNrdvHelloPrefix);
-  if (!isValidRouter(interestName, kNrdvHelloPrefix)) {
+  std::string neighPrefix = ExtractRouterPrefix(interestName, kNdvrHelloPrefix);
+  if (!isValidRouter(interestName, kNdvrHelloPrefix)) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
@@ -208,11 +208,11 @@ void Nrdv::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   SendDvInfoInterest(neigh->second);
 }
 
-void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
+void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received DV-Info Interest " << interest.getName());
 
   // Sanity check
-  std::string routerPrefix = ExtractRouterPrefix(interest.getName(), kNrdvDvInfoPrefix);
+  std::string routerPrefix = ExtractRouterPrefix(interest.getName(), kNdvrDvInfoPrefix);
   if (routerPrefix != m_routerPrefix) {
     //NS_LOG_INFO("Interest is not to me, ignoring.. received_name=" << routerPrefix << " my_name=" << m_routerPrefix);
     return;
@@ -232,30 +232,30 @@ void Nrdv::OnDvInfoInterest(const ndn::Interest& interest) {
   m_face.put(*data);
 }
 
-void Nrdv::OnKeyInterest(const ndn::Interest& interest) {
+void Ndvr::OnKeyInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received KEY Interest " << interest.getName());
   // TODO: send our key??
 }
 
-void Nrdv::OnDvInfoTimedOut(const ndn::Interest& interest) {
+void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest) {
   NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName());
   // TODO: Apply the same logic as in HelloProtocol::processInterestTimedOut (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
   // TODO: what if node has moved?
 }
 
-void Nrdv::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
+void Ndvr::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
   NS_LOG_DEBUG("Received Nack with reason: " << nack.getReason());
   // should we treat as a timeout? should the Nack represent no changes on neigh DvInfo?
   //m_scheduler.schedule(ndn::time::seconds(m_localRTInterval),
   //  [this, interest] { processInterestTimedOut(interest); });
 }
 
-void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data) {
+void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data) {
   NS_LOG_DEBUG("Received content for DV-Info: " << data.getName());
 
   /* Sanity checks */
-  std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNrdvDvInfoPrefix);
-  if (!isValidRouter(data.getName(), kNrdvDvInfoPrefix)) {
+  std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNdvrDvInfoPrefix);
+  if (!isValidRouter(data.getName(), kNdvrDvInfoPrefix)) {
     NS_LOG_INFO("Not a router, ignoring...");
     return;
   }
@@ -300,7 +300,7 @@ void Nrdv::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
 }
 
 void
-Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) {
+Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) {
   NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor.GetName());
   for (auto entry : otherRT) {
     std::string neigh_prefix = entry.first;
@@ -372,19 +372,19 @@ Nrdv::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
 }
 
 uint32_t
-Nrdv::CalculateCostToNeigh(NeighborEntry& neighbor, uint32_t cost) {
+Ndvr::CalculateCostToNeigh(NeighborEntry& neighbor, uint32_t cost) {
   return cost+1;
 }
 
 bool
-Nrdv::isValidCost(uint32_t cost) {
+Ndvr::isValidCost(uint32_t cost) {
   return cost < std::numeric_limits<uint32_t>::max();
 }
 
 bool
-Nrdv::isInfinityCost(uint32_t cost) {
+Ndvr::isInfinityCost(uint32_t cost) {
   return cost == std::numeric_limits<uint32_t>::max();
 }
 
-} // namespace nrdv
+} // namespace ndvr
 } // namespace ndn

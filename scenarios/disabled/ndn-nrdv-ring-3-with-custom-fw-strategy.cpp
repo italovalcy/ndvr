@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
-#include "nrdv-app.hpp"
-#include "nrdv-strategy.hpp"
+#include "ndvr-app.hpp"
+#include "ndvr-strategy.hpp"
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -11,7 +11,7 @@
 
 namespace ns3 {
 
-NS_OBJECT_ENSURE_REGISTERED(NrdvApp);
+NS_OBJECT_ENSURE_REGISTERED(NdvrApp);
 
 int
 main(int argc, char* argv[])
@@ -39,9 +39,9 @@ main(int argc, char* argv[])
 
   // 4. Set Forwarding Strategy
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
-  ndn::StrategyChoiceHelper::Install<nfd::fw::NrdvMulticastStrategy>(nodes, "/nrdv/hello");
+  ndn::StrategyChoiceHelper::Install<nfd::fw::NdvrMulticastStrategy>(nodes, "/ndvr/hello");
 
-  // 5. Install NDN Apps (Nrdv)
+  // 5. Install NDN Apps (Ndvr)
   uint64_t idx = 0;
   for (NodeContainer::Iterator i = nodes.Begin(); i != nodes.End(); ++i, idx++) {
     Ptr<Node> node = *i;    /* This is NS3::Node, not ndn::Node */
@@ -49,13 +49,13 @@ main(int argc, char* argv[])
 
     std::cout << "node " << idx << " RouterName: " << routerName << std::endl;
 
-    ndn::AppHelper appHelper("NrdvApp");
+    ndn::AppHelper appHelper("NdvrApp");
     appHelper.SetAttribute("Network", StringValue("/ndn"));
     appHelper.SetAttribute("RouterName", StringValue(routerName));
     appHelper.Install(node)
       .Start(Seconds(1.0));
 
-    auto app = DynamicCast<NrdvApp>(node->GetApplication(0));
+    auto app = DynamicCast<NdvrApp>(node->GetApplication(0));
     app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
   }

@@ -6,7 +6,7 @@
 #include <ns3/node-list.h>
 
 namespace ndn {
-namespace nrdv {
+namespace ndvr {
 
 void RoutingTable::registerPrefix(std::string name, uint64_t faceId, uint32_t cost) {
   using namespace ns3;
@@ -64,5 +64,5 @@ void RoutingTable::insert(RoutingEntry& e) {
   m_rt[e.GetName()] = e;
 }
 
-} // namespace nrdv
+} // namespace ndvr
 } // namespace ndn

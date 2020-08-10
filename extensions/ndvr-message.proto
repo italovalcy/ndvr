@@ -3,7 +3,7 @@
 
 syntax = "proto3";
 
-package ndn.nrdv.proto;
+package ndn.ndvr.proto;
 
 // Distance Vector Information
 message DvInfo {

@@ -1,7 +1,7 @@
-NRDV
+NDVR
 ====
 
-NRDV (Named-data Routing via Distance Vector) is routing protocol for NDN. More details soon.
+NDVR (NDN Distance Vector Routing) is routing protocol for NDN. More details soon.
 
 Building
 ========
@@ -29,8 +29,8 @@ The code should also work with the latest version of ndnSIM, but it is not guara
 
 
     cd ..
-    git clone https://github.com/italovalcy/nrdv
-    cd nrdv
+    git clone https://github.com/italovalcy/ndvr
+    cd ndvr
     PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH ./waf configure --debug
     ./waf
 
@@ -38,14 +38,14 @@ The code should also work with the latest version of ndnSIM, but it is not guara
 Running
 =======
 
-After follow the steps for building the code, you can run NRDV as the following:
+After follow the steps for building the code, you can run NDVR as the following:
 
-    NS_LOG=ndn.Nrdv ./waf --run ndn-nrdv-grid-3
+    NS_LOG=ndn.Ndvr ./waf --run ndn-ndvr-grid-3
 
 The above command will run in verbose mode, showing lots of information from the 
 protocol. To just run the code without debug:
 
-    ./waf --run ndn-nrdv-grid-3
+    ./waf --run ndn-ndvr-grid-3
 
 More information
 ================

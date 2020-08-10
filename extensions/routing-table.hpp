@@ -5,7 +5,7 @@
 
 
 namespace ndn {
-namespace nrdv {
+namespace ndvr {
 
 class RoutingEntry {
 public:
@@ -109,7 +109,7 @@ private:
   void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
 };
 
-} // namespace nrdv
+} // namespace ndvr
 } // namespace ndn
 
 #endif // _ROUTINGTABLE_H_

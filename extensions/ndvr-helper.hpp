@@ -1,10 +1,10 @@
-#ifndef _NRDV_HELPER_HPP_
-#define _NRDV_HELPER_HPP_
+#ifndef _NDVR_HELPER_HPP_
+#define _NDVR_HELPER_HPP_
 
-#include "nrdv-message.pb.h"
+#include "ndvr-message.pb.h"
 
 namespace ndn {
-namespace nrdv {
+namespace ndvr {
 
 inline void EncodeDvInfo(RoutingTable& v, proto::DvInfo* dvinfo_proto) {
   for (auto it = v.begin(); it != v.end(); ++it) {
@@ -42,7 +42,7 @@ inline RoutingTable DecodeDvInfo(const void* buf, size_t buf_size) {
   }
   return DecodeDvInfo(dvinfo_proto);
 }
-}  // namespace nrdv
+}  // namespace ndvr
 }  // namespace ndn
 
-#endif  // _NRDV_HELPER_HPP_
+#endif  // _NDVR_HELPER_HPP_

@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
-#ifndef NRDV_HPP
-#define NRDV_HPP
+#ifndef NDVR_HPP
+#define NDVR_HPP
 
 
 #include <iostream>
@@ -16,16 +16,16 @@
 #include <ns3/random-variable-stream.h>
 
 #include "routing-table.hpp"
-#include "nrdv-message.pb.h"
-#include "nrdv-helper.hpp"
+#include "ndvr-message.pb.h"
+#include "ndvr-helper.hpp"
 
 namespace ndn {
-namespace nrdv {
+namespace ndvr {
 
-static const Name kNrdvPrefix = Name("/nrdv");
-static const Name kNrdvHelloPrefix = Name("/nrdv/ehlo");
-static const Name kNrdvDvInfoPrefix = Name("/nrdv/dvinfo");
-static const Name kNrdvKeyPrefix = Name("/nrdv/key");
+static const Name kNdvrPrefix = Name("/ndvr");
+static const Name kNdvrHelloPrefix = Name("/ndvr/ehlo");
+static const Name kNdvrDvInfoPrefix = Name("/ndvr/dvinfo");
+static const Name kNdvrKeyPrefix = Name("/ndvr/key");
 static const std::string kRouterTag = "\%C1.Router";
 
 
@@ -87,10 +87,10 @@ private:
   std::string what_;
 };
 
-class Nrdv
+class Ndvr
 {
 public:
-  Nrdv(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& np);
+  Ndvr(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& np);
   void run();
   void Start();
   void Stop();
@@ -134,12 +134,12 @@ private:
    *
    * @param name: The interest name received from a neighbor. It 
    * should be formatted:
-   *    /NRDV/<type>/<network>/%C1.Router/<router_name>
+   *    /NDVR/<type>/<network>/%C1.Router/<router_name>
    * @param prefix: The prefix type: Hello, DvInfo or Key
    *
    * Example: 
-   *    Input-name: /NRDV/HELLO/ufba/%C1.Router/Router1
-   *    Input-prefix: /NRDV/HELLO
+   *    Input-name: /NDVR/HELLO/ufba/%C1.Router/Router1
+   *    Input-prefix: /NDVR/HELLO
    *    Returns: true
    */
   bool isValidRouter(const Name& name, const Name& prefix) {
@@ -151,12 +151,12 @@ private:
    *
    * @param name: The interest name received from a neighbor. It 
    * should be formatted:
-   *    /NRDV/<type>/<network>/%C1.Router/<router_name>
+   *    /NDVR/<type>/<network>/%C1.Router/<router_name>
    * @param prefix: The prefix type: Hello, DvInfo or Key
    *
    * Example 1: 
-   *    Input-name: /NRDV/HELLO/ufba/%C1.Router/Router1
-   *    Input-prefix: /NRDV/HELLO
+   *    Input-name: /NDVR/HELLO/ufba/%C1.Router/Router1
+   *    Input-prefix: /NDVR/HELLO
    *    Returns: /ufba/%C1.Router/Router1
    */
   std::string ExtractRouterPrefix(const Name& name, const Name& prefix) {
@@ -185,7 +185,7 @@ private:
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
 };
 
-} // namespace nrdv
+} // namespace ndvr
 } // namespace ndn
 
-#endif // NRDV
+#endif // NDVR
