@@ -11,13 +11,14 @@
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/security/key-chain.hpp>
+#include <ndn-cxx/security/signing-helpers.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
 #include <ns3/core-module.h>
 #include <ns3/random-variable-stream.h>
 
 #include "routing-table.hpp"
 #include "ndvr-message.pb.h"
-#include "ndvr-helper.hpp"
+#include "ndvr-message-helper.hpp"
 
 namespace ndn {
 namespace ndvr {
@@ -90,7 +91,7 @@ private:
 class Ndvr
 {
 public:
-  Ndvr(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& np);
+  Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np);
   void run();
   void Start();
   void Stop();
@@ -163,8 +164,15 @@ private:
     return name.getSubName(prefix.size(), 3).toUri();
   }
 
+  const ndn::security::SigningInfo&
+  getSigningInfo() const
+  {
+    return m_signingInfo;
+  }
+
 private:
   ndn::KeyChain& m_keyChain;
+  const ndn::security::SigningInfo& m_signingInfo;
   ndn::Scheduler m_scheduler;
   uint32_t m_seq;
   ns3::Ptr<ns3::UniformRandomVariable> m_rand; ///< @brief nonce generator

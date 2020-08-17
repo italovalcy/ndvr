@@ -15,8 +15,9 @@ NS_LOG_COMPONENT_DEFINE("ndn.Ndvr");
 namespace ndn {
 namespace ndvr {
 
-Ndvr::Ndvr(ndn::KeyChain& keyChain, Name network, Name routerName, std::vector<std::string>& npv)
+Ndvr::Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv)
   : m_keyChain(keyChain)
+  , m_signingInfo(signingInfo)
   , m_scheduler(m_face.getIoService())
   , m_seq(0)
   , m_rand(ns3::CreateObject<ns3::UniformRandomVariable>())

@@ -31,9 +31,13 @@ public:
     namePrefixes_.push_back(name);
   }
 
+  void AddSigningInfo(::ndn::security::SigningInfo signingInfo) {
+    signingInfo_ = signingInfo;
+  }
+
 protected:
   virtual void StartApplication() {
-    m_instance.reset(new ::ndn::ndvr::Ndvr(ndn::StackHelper::getKeyChain(), network_, routerName_, namePrefixes_));
+    m_instance.reset(new ::ndn::ndvr::Ndvr(ndn::StackHelper::getKeyChain(), signingInfo_, network_, routerName_, namePrefixes_));
     m_instance->Start();
   }
 
@@ -44,6 +48,7 @@ protected:
 
 private:
   std::unique_ptr<::ndn::ndvr::Ndvr> m_instance;
+  ::ndn::security::SigningInfo signingInfo_;
   ndn::Name network_;
   ndn::Name routerName_;
   std::vector<std::string> namePrefixes_;

@@ -1,6 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
 #include "ndvr-app.hpp"
+#include "ndvr-security-helper.hpp"
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -39,6 +40,10 @@ main(int argc, char* argv[])
   // 4. Set Forwarding Strategy
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
 
+  // 4.1 Security
+  std::string network = "/ndn";
+  ::ndn::ndvr::setupRootCert(ndn::Name(network));
+
   // 5. Install NDN Apps (Ndvr)
   uint64_t idx = 0;
   for (NodeContainer::Iterator i = nodes.Begin(); i != nodes.End(); ++i, idx++) {
@@ -56,6 +61,7 @@ main(int argc, char* argv[])
     auto app = DynamicCast<NdvrApp>(node->GetApplication(0));
     app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
+    app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
   }
 
   Simulator::Stop(Seconds(120.0));
