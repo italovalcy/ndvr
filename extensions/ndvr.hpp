@@ -12,6 +12,7 @@
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/security/key-chain.hpp>
 #include <ndn-cxx/security/signing-helpers.hpp>
+#include <ndn-cxx/security/validator-config.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
 #include <ns3/core-module.h>
 #include <ns3/random-variable-stream.h>
@@ -26,7 +27,6 @@ namespace ndvr {
 static const Name kNdvrPrefix = Name("/ndvr");
 static const Name kNdvrHelloPrefix = Name("/ndvr/ehlo");
 static const Name kNdvrDvInfoPrefix = Name("/ndvr/dvinfo");
-static const Name kNdvrKeyPrefix = Name("/ndvr/key");
 static const std::string kRouterTag = "\%C1.Router";
 
 
@@ -91,7 +91,7 @@ private:
 class Ndvr
 {
 public:
-  Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np);
+  Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np);
   void run();
   void Start();
   void Stop();
@@ -113,6 +113,8 @@ private:
   void OnDvInfoTimedOut(const ndn::Interest& interest);
   void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
   void SendDvInfoInterest(NeighborEntry& neighbor);
+  void OnValidatedDvInfo(const ndn::Data& data);
+  void OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve);
   void SendHelloInterest();
   void registerPrefixes();
   void printFib();
@@ -171,15 +173,16 @@ private:
   }
 
 private:
-  ndn::KeyChain& m_keyChain;
   const ndn::security::SigningInfo& m_signingInfo;
   ndn::Scheduler m_scheduler;
+  ndn::ValidatorConfig m_validator;
   uint32_t m_seq;
   ns3::Ptr<ns3::UniformRandomVariable> m_rand; ///< @brief nonce generator
   Name m_network;
   Name m_routerName;
   ndn::Face m_face;
 
+  ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
   NeighborMap m_neighMap;
   RoutingTable m_routingTable;

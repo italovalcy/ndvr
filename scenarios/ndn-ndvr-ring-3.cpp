@@ -42,7 +42,8 @@ main(int argc, char* argv[])
 
   // 4.1 Security
   std::string network = "/ndn";
-  ::ndn::ndvr::setupRootCert(ndn::Name(network));
+  // TODO: the trusted keystore should be a config parameter (see config/validation.conf)
+  ::ndn::ndvr::setupRootCert(ndn::Name(network), "config/trust.cert");
 
   // 5. Install NDN Apps (Ndvr)
   uint64_t idx = 0;

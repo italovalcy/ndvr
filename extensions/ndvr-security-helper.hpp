@@ -10,7 +10,7 @@ namespace ndn {
 namespace ndvr {
 
 inline void
-setupRootCert(const ndn::Name& subjectName, std::string& filename) {
+setupRootCert(const ndn::Name& subjectName, std::string filename) {
   ndn::KeyChain keyChain;
   try {
     /* cleanup: remove any possible existing certificate with the same name */
@@ -30,8 +30,7 @@ setupRootCert(const ndn::Name& subjectName, std::string& filename) {
 
 inline void
 setupRootCert(const ndn::Name& subjectName) {
-  std::string filename = "";
-  setupRootCert(subjectName, filename);
+  setupRootCert(subjectName, "");
 }
 
 inline ndn::security::SigningInfo

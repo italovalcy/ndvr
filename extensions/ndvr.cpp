@@ -15,10 +15,10 @@ NS_LOG_COMPONENT_DEFINE("ndn.Ndvr");
 namespace ndn {
 namespace ndvr {
 
-Ndvr::Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv)
-  : m_keyChain(keyChain)
-  , m_signingInfo(signingInfo)
+Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv)
+  : m_signingInfo(signingInfo)
   , m_scheduler(m_face.getIoService())
+  , m_validator(m_face)
   , m_seq(0)
   , m_rand(ns3::CreateObject<ns3::UniformRandomVariable>())
   , m_network(network)
@@ -29,6 +29,17 @@ Ndvr::Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInf
   , m_localRTInterval(1)
   , m_localRTTimeout(1)
 {
+  buildRouterPrefix();
+
+  // TODO: this should be a conf parameter
+  std::string fileName = "config/validation.conf";
+  try {
+    m_validator.load(fileName);
+  }
+  catch (const std::exception &e ) {
+    throw Error("Failed to load validation rules file=" + fileName + " Error=" + e.what());
+  }
+
   for (std::vector<std::string>::iterator it = npv.begin() ; it != npv.end(); ++it) {
     RoutingEntry routingEntry;
     routingEntry.SetName(*it);
@@ -41,8 +52,13 @@ Ndvr::Ndvr(ndn::KeyChain& keyChain, const ndn::security::SigningInfo& signingInf
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);
   });
+  Name routerKey = m_routerPrefix;
+  routerKey.append("KEY");
+  m_face.setInterestFilter(routerKey, std::bind(&Ndvr::OnKeyInterest, this, _2),
+    [this](const Name&, const std::string& reason) {
+      throw Error("Failed to register sync interest prefix: " + reason);
+  });
 
-  buildRouterPrefix();
   registerPrefixes();
   m_scheduler.schedule(ndn::time::seconds(1),
                         [this] { printFib(); });
@@ -163,8 +179,6 @@ void Ndvr::processInterest(const ndn::Interest& interest) {
     return OnHelloInterest(interest, inFaceId);
   else if (kNdvrDvInfoPrefix.isPrefixOf(interestName))
     return OnDvInfoInterest(interest);
-  else if (kNdvrKeyPrefix.isPrefixOf(interestName))
-    return OnKeyInterest(interest);
 
   NS_LOG_INFO("Unknown Interest " << interestName);
 }
@@ -229,13 +243,26 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
   // Sign and send
-  m_keyChain.sign(*data);
+  m_keyChain.sign(*data, m_signingInfo);
   m_face.put(*data);
 }
 
 void Ndvr::OnKeyInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Received KEY Interest " << interest.getName());
-  // TODO: send our key??
+  std::string nameStr = interest.getName().toUri();
+  std::size_t pos = nameStr.find("/KEY/");
+  ndn::Name identityName = ndn::Name(nameStr.substr(0, pos));
+
+  try {
+    // Create Data packet
+    ndn::security::v2::Certificate cert = m_keyChain.getPib().getIdentity(identityName).getDefaultKey().getDefaultCertificate();
+
+    // Return Data packet to the requester
+    m_face.put(cert);
+  }
+  catch (const std::exception& ) {
+    NS_LOG_DEBUG("The certificate: " << interest.getName() << " does not exist! I was looking for Identity=" << identityName);
+  }
 }
 
 void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest) {
@@ -265,6 +292,21 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
     return;
   }
 
+  /* Security validation */
+  if (data.getSignature().hasKeyLocator() &&
+      data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
+    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+  }
+
+  // Validating data
+  m_validator.validate(data,
+                       std::bind(&Ndvr::OnValidatedDvInfo, this, _1),
+                       std::bind(&Ndvr::OnDvInfoValidationFailed, this, _1, _2));
+}
+
+void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
+  std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNdvrDvInfoPrefix);
+
   /* Overheard DvInfo */
   auto neigh_it = m_neighMap.find(neighPrefix);
   if (neigh_it == m_neighMap.end()) {
@@ -272,13 +314,6 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
     // TODO: mark some flag for future use
     // TODO: insert on the neighborMap?
   }
-
-  /* Security validation */
-  if (data.getSignature().hasKeyLocator() &&
-      data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
-    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
-  }
-  // TODO: validate data as in HelloProtocol::onContent (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
 
   /* Extract DvInfo and process Distance Vector update */
   const auto& content = data.getContent();
@@ -298,6 +333,10 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   auto otherRT = DecodeDvInfo(dvinfo_proto);
   processDvInfoFromNeighbor(neigh_it->second, otherRT);
   //NS_LOG_INFO("Done");
+}
+
+void Ndvr::OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve) {
+  NS_LOG_DEBUG("Not validated data: " << data.getName() << ". The failure info: " << ve);
 }
 
 void

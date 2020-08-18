@@ -37,7 +37,7 @@ public:
 
 protected:
   virtual void StartApplication() {
-    m_instance.reset(new ::ndn::ndvr::Ndvr(ndn::StackHelper::getKeyChain(), signingInfo_, network_, routerName_, namePrefixes_));
+    m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
     m_instance->Start();
   }
 
