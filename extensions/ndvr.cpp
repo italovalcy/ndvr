@@ -89,6 +89,20 @@ void Ndvr::printFib() {
   }
 }
 
+void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, uint64_t newFaceId) {
+  using namespace ns3;
+  using namespace ns3::ndn;
+
+  int32_t metric = CalculateCostToNeigh(neighbor, 0);
+  Name namePrefix = Name(neighbor.GetName());
+  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
+
+  if (oldFaceId != 0) {
+    FibHelper::RemoveRoute(thisNode, namePrefix, oldFaceId);
+  }
+  FibHelper::AddRoute(thisNode, namePrefix, newFaceId, metric);
+}
+
 void
 Ndvr::registerPrefixes() {
   using namespace ns3;
@@ -215,8 +229,13 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   if (neigh == m_neighMap.end()) {
     ResetHelloInterval();
     neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
+    uint64_t oldFaceId = 0;
+    registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
   } else {
     NS_LOG_INFO("Already known router, increasing the hello interval");
+    if (neigh->second.GetFaceId() != inFaceId) {
+      registerNeighborPrefix(neigh->second, neigh->second.GetFaceId(), inFaceId);
+    }
     IncreaseHelloInterval();
     //return;
   }
@@ -305,6 +324,7 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
 }
 
 void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
+  NS_LOG_DEBUG("Validated data: " << data.getName());
   std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNdvrDvInfoPrefix);
 
   /* Overheard DvInfo */

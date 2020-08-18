@@ -65,7 +65,7 @@ main(int argc, char* argv[])
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
   }
 
-  Simulator::Stop(Seconds(120.0));
+  Simulator::Stop(Seconds(128.0));
 
   Simulator::Run();
   Simulator::Destroy();
