@@ -42,6 +42,10 @@ public:
     m_seqNum = seqNum;
   }
 
+  void IncSeqNum() {
+    m_seqNum += 1;
+  }
+
   uint64_t GetSeqNum() {
     return m_seqNum;
   }
@@ -65,6 +69,10 @@ public:
   bool isNextHop(uint64_t faceId) {
     // TODO: in case of multipath, we may need to compare with a list of faces
     return faceId == m_faceId;
+  }
+
+  bool isDirectRoute() {
+    return m_faceId == 0;
   }
 
 private:

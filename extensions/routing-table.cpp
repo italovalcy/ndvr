@@ -30,7 +30,7 @@ bool RoutingTable::isDirectRoute(std::string n) {
   auto it = m_rt.find(n);
   if (it == m_rt.end())
     return false;
-  return it->second.GetFaceId() == 0;
+  return it->second.isDirectRoute();
 }
 
 bool RoutingTable::LookupRoute(std::string n) {

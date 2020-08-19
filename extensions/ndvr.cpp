@@ -257,7 +257,7 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
   std::string dvinfo_str;
-  EncodeDvInfo(m_routingTable, dvinfo_str);
+  EncodeDvInfo(dvinfo_str);
   NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
@@ -357,6 +357,21 @@ void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
 
 void Ndvr::OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve) {
   NS_LOG_DEBUG("Not validated data: " << data.getName() << ". The failure info: " << ve);
+}
+
+void Ndvr::EncodeDvInfo(std::string& out) {
+  proto::DvInfo dvinfo_proto;
+  for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
+    /* For local routes, increment the seqNum */
+    if (it->second.isDirectRoute())
+      it->second.IncSeqNum();
+
+    auto* entry = dvinfo_proto.add_entry();
+    entry->set_prefix(it->first);
+    entry->set_seq(it->second.GetSeqNum());
+    entry->set_cost(it->second.GetCost());
+  }
+  dvinfo_proto.AppendToString(&out);
 }
 
 void

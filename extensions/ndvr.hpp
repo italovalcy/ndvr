@@ -121,6 +121,7 @@ private:
   void printFib();
   bool isInfinityCost(uint32_t cost);
   bool isValidCost(uint32_t cost);
+  void EncodeDvInfo(std::string& out);
   void processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& dvinfo_other);
   uint32_t CalculateCostToNeigh(NeighborEntry&, uint32_t cost);
   void IncreaseHelloInterval();
