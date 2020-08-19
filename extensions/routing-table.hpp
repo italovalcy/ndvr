@@ -92,7 +92,7 @@ public:
   RoutingTable() {}
   ~RoutingTable() {}
 
-  void UpdateRoute(RoutingEntry& e);
+  void UpdateRoute(RoutingEntry& e, uint64_t new_nh);
   void AddRoute(RoutingEntry& e);
   void DeleteRoute(RoutingEntry& e, uint64_t nh);
   bool isDirectRoute(std::string n);

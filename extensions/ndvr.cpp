@@ -409,18 +409,22 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       //   - Recv_Cost == Local_cost: update Local_SeqNum
       //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
       if (localRE.GetCost() == neigh_cost) {
-        // TODO: what if they have the same cost by differente faces?
+        if (!localRE.isNextHop(neighbor.GetFaceId())) {
+          /* TODO: if they have the same cost but from different faces, could save for multipath */
+        }
         localRE.SetSeqNum(neigh_seq);
       } else {
+        /* Cost change will be handle by periodic updates */
         localRE.SetCost(neigh_cost);
-        localRE.SetFaceId(neighbor.GetFaceId());
         localRE.SetSeqNum(neigh_seq);
+        m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
       }
     } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost < localRE.GetCost()) {
       NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE.GetCost());
+      /* Cost change will be handle by periodic updates */
       // TODO: wait SettlingTime, then update Local_Cost
       localRE.SetCost(neigh_cost);
-      localRE.SetFaceId(neighbor.GetFaceId());
+      m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
     } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost >= localRE.GetCost()) {
       //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE.GetCost());
       // TODO: save this new prefix as well to multipath

@@ -45,7 +45,12 @@ bool RoutingTable::LookupRoute(std::string n, RoutingEntry& e) {
   return true;
 }
 
-void RoutingTable::UpdateRoute(RoutingEntry& e) {
+void RoutingTable::UpdateRoute(RoutingEntry& e, uint64_t new_nh) {
+  if (e.GetFaceId() != new_nh) {
+    unregisterPrefix(e.GetName(), e.GetFaceId());
+  }
+  e.SetFaceId(new_nh);
+  AddRoute(e);
 }
 
 void RoutingTable::AddRoute(RoutingEntry& e) {
