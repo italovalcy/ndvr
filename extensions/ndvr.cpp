@@ -199,7 +199,7 @@ uint64_t Ndvr::ExtractIncomingFace(const ndn::Data& data) {
 void Ndvr::processInterest(const ndn::Interest& interest) {
   uint64_t inFaceId = ExtractIncomingFace(interest);
   if (!inFaceId) {
-    NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
+    //NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
     return;
   }
   NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
