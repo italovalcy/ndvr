@@ -126,6 +126,8 @@ private:
   uint32_t CalculateCostToNeigh(NeighborEntry&, uint32_t cost);
   void IncreaseHelloInterval();
   void ResetHelloInterval();
+  uint64_t ExtractIncomingFace(const ndn::Interest& interest);
+  uint64_t ExtractIncomingFace(const ndn::Data& data);
 
   void
   buildRouterPrefix()

@@ -92,6 +92,7 @@ void Ndvr::printFib() {
 void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, uint64_t newFaceId) {
   using namespace ns3;
   using namespace ns3::ndn;
+  NS_LOG_DEBUG("AddNeighPrefix=" << neighbor.GetName() << " oldFaceId=" << oldFaceId << " newFaceId=" << newFaceId);
 
   int32_t metric = CalculateCostToNeigh(neighbor, 0);
   Name namePrefix = Name(neighbor.GetName());
@@ -171,7 +172,7 @@ Ndvr::SendDvInfoInterest(NeighborEntry& neighbor) {
   //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Ndvr::SendDvInfoInterest, this, neighbor);
 }
 
-void Ndvr::processInterest(const ndn::Interest& interest) {
+uint64_t Ndvr::ExtractIncomingFace(const ndn::Interest& interest) {
   /** Incoming Face Indication
    * NDNLPv2 says "Incoming face indication feature allows the forwarder to inform local applications
    * about the face on which a packet is received." and also warns "application MUST be prepared to
@@ -182,11 +183,26 @@ void Ndvr::processInterest(const ndn::Interest& interest) {
    */
   shared_ptr<lp::IncomingFaceIdTag> incomingFaceIdTag = interest.getTag<lp::IncomingFaceIdTag>();
   if (incomingFaceIdTag == nullptr) {
-    //NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
+    return 0;
+  }
+  return *incomingFaceIdTag;
+}
+
+uint64_t Ndvr::ExtractIncomingFace(const ndn::Data& data) {
+  shared_ptr<lp::IncomingFaceIdTag> incomingFaceIdTag = data.getTag<lp::IncomingFaceIdTag>();
+  if (incomingFaceIdTag == nullptr) {
+    return 0;
+  }
+  return *incomingFaceIdTag;
+}
+
+void Ndvr::processInterest(const ndn::Interest& interest) {
+  uint64_t inFaceId = ExtractIncomingFace(interest);
+  if (!inFaceId) {
+    NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
     return;
   }
-  uint64_t inFaceId = *incomingFaceIdTag;
-  //NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
+  NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
 
   const ndn::Name interestName(interest.getName());
   if (kNdvrHelloPrefix.isPrefixOf(interestName))
@@ -234,7 +250,11 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   } else {
     NS_LOG_INFO("Already known router, increasing the hello interval");
     if (neigh->second.GetFaceId() != inFaceId) {
-      registerNeighborPrefix(neigh->second, neigh->second.GetFaceId(), inFaceId);
+      /* Issue #2: TODO: We need to be careful about this because since we are using default multicast forward strategy,
+       * mean that one node can forward ndvr messages from other nodes, so the interest might be received from
+       * the direct face or from the intermediate forwarder face! Not necessarily means the node moved! */
+      //NS_LOG_INFO("Neighbor moved from faceId=" << neigh->second.GetFaceId() << " to faceId=" << inFaceId << " neigh=" << neighPrefix);
+      //registerNeighborPrefix(neigh->second, neigh->second.GetFaceId(), inFaceId);
     }
     IncreaseHelloInterval();
     //return;
@@ -258,7 +278,7 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   // Set dvinfo
   std::string dvinfo_str;
   EncodeDvInfo(dvinfo_str);
-  NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size());
+  NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size() << " I=" << interest.getName());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
   // Sign and send
@@ -312,9 +332,25 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   }
 
   /* Security validation */
-  if (data.getSignature().hasKeyLocator() &&
-      data.getSignature().getKeyLocator().getType() == ndn::tlv::Name) {
+  if (data.getSignature().hasKeyLocator()) {
     NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+  }
+
+  /* Check for overheard DvInfo */
+  auto neigh_it = m_neighMap.find(neighPrefix);
+  if (neigh_it == m_neighMap.end()) {
+    uint64_t oldFaceId = 0;
+    uint64_t inFaceId = ExtractIncomingFace(data);
+    if (inFaceId) {
+      NS_LOG_INFO("Overheard DvInfo neigh=" << neighPrefix << " inFaceId=" << inFaceId);
+      neigh_it = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
+      registerNeighborPrefix(neigh_it->second, oldFaceId, inFaceId);
+    } else {
+      NS_LOG_INFO("Discarding Overheard DvInfo neigh=" << neighPrefix << " inFaceId=" << inFaceId << " (invalid IncomingFace)");
+      return;
+    }
+  } else {
+    //NS_LOG_DEBUG("Neighbor already known: neighbor=" << neighPrefix << " faceId=" << neigh_it->second.GetFaceId());
   }
 
   // Validating data
@@ -327,12 +363,11 @@ void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
   NS_LOG_DEBUG("Validated data: " << data.getName());
   std::string neighPrefix = ExtractRouterPrefix(data.getName(), kNdvrDvInfoPrefix);
 
-  /* Overheard DvInfo */
+  /* Sanity check: at this point the neighbor should be known */
   auto neigh_it = m_neighMap.find(neighPrefix);
   if (neigh_it == m_neighMap.end()) {
-    NS_LOG_INFO("Overheard DvInfo!");
-    // TODO: mark some flag for future use
-    // TODO: insert on the neighborMap?
+    NS_LOG_INFO("Discard DvInfo from unknonw neighbor=" << neighPrefix);
+    return;
   }
 
   /* Extract DvInfo and process Distance Vector update */
