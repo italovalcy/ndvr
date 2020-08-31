@@ -95,6 +95,7 @@ public:
   void run();
   void Start();
   void Stop();
+  void AdvNamePrefix(std::string& name);
 
   const ndn::Name&
   getRouterPrefix() const

@@ -500,5 +500,26 @@ Ndvr::isInfinityCost(uint32_t cost) {
   return cost == std::numeric_limits<uint32_t>::max();
 }
 
+void Ndvr::AdvNamePrefix(std::string& name) {
+  RoutingEntry routingEntry;
+  routingEntry.SetName(name);
+  routingEntry.SetSeqNum(1);
+  routingEntry.SetCost(0);
+  routingEntry.SetFaceId(0); /* directly connected */
+
+  /* If the application already started (ie., there is a Hello Event), then
+   * update the routing table and schedule a immediate ehlo message to notify
+   * neighbors about a new DvInfo; otherwise, just insert on the initial
+   * routing table
+   * */
+  if (sendhello_event) {
+    m_routingTable.AddRoute(routingEntry);
+    ResetHelloInterval();
+    SendHelloInterest();
+  } else {
+    m_routingTable.insert(routingEntry);
+  }
+}
+
 } // namespace ndvr
 } // namespace ndn

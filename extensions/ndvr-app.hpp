@@ -27,8 +27,14 @@ public:
     return tid;
   }
 
+  /* Initial name prefixes to be advertised since the begining */
   void AddNamePrefix(std::string name) {
     namePrefixes_.push_back(name);
+  }
+
+  /* Advertise a name prefix any time during operation */
+  void AdvNamePrefix(std::string& name) {
+    m_instance->AdvNamePrefix(name);
   }
 
   void AddSigningInfo(::ndn::security::SigningInfo signingInfo) {
