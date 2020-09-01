@@ -1,0 +1,70 @@
+diff --git a/extensions/routing-table.cpp b/extensions/routing-table.cpp
+index ce6b5fc..5509899 100644
+--- a/extensions/routing-table.cpp
++++ b/extensions/routing-table.cpp
+@@ -8,6 +8,18 @@
+ namespace ndn {
+ namespace ndvr {
+ 
++ns3::TypeId RoutingTable::GetTypeId(void) {
++  static ns3::TypeId tid =
++    ns3::TypeId("Ndvr")
++      .SetGroupName("ndn")
++      .SetParent<ns3::Object>()
++      .AddTraceSource("AddRoute",
++                      "Name prefix added to the Fib via NDVR",
++                      ns3::MakeTraceSourceAccessor(&RoutingTable::m_addedRoute),
++                      "ndn::ndvr::rRoutingTable::AddRouteCallback");
++  return tid;
++}
++
+ void RoutingTable::registerPrefix(std::string name, uint64_t faceId, uint32_t cost) {
+   using namespace ns3;
+   using namespace ns3::ndn;
+@@ -56,6 +68,7 @@ void RoutingTable::UpdateRoute(RoutingEntry& e, uint64_t new_nh) {
+ void RoutingTable::AddRoute(RoutingEntry& e) {
+   registerPrefix(e.GetName(), e.GetFaceId(), e.GetCost());
+   m_rt[e.GetName()] = e;
++  m_addedRoute(e.GetName());
+ }
+ 
+ void RoutingTable::DeleteRoute(RoutingEntry& e, uint64_t nh) {
+diff --git a/extensions/routing-table.hpp b/extensions/routing-table.hpp
+index 66158d5..2809979 100644
+--- a/extensions/routing-table.hpp
++++ b/extensions/routing-table.hpp
+@@ -2,6 +2,8 @@
+ #define _ROUTINGTABLE_H_
+ 
+ #include <map>
++#include "ns3/simulator.h"
++#include "ns3/traced-callback.h"
+ 
+ 
+ namespace ndn {
+@@ -93,12 +95,13 @@ private:
+  *   into a RIB entry.
+  */
+ //class RoutingTable : public std::map<std::string, RoutingEntry> {
+-class RoutingTable {
++class RoutingTable : public ns3::Object {
+ public:
+   std::map<std::string, RoutingEntry> m_rt;
+ 
+   RoutingTable() {}
+   ~RoutingTable() {}
++  static ns3::TypeId GetTypeId(void);
+ 
+   void UpdateRoute(RoutingEntry& e, uint64_t new_nh);
+   void AddRoute(RoutingEntry& e);
+@@ -112,6 +115,10 @@ public:
+   decltype(m_rt.begin()) begin() { return m_rt.begin(); }
+   decltype(m_rt.end()) end() { return m_rt.end(); }
+   decltype(m_rt.size()) size() { return m_rt.size(); }
++
++protected:
++  ns3::TracedCallback<const std::string&> m_addedRoute;
++
+ private:
+   void unregisterPrefix(std::string name, uint64_t faceId);
+   void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
