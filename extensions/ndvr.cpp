@@ -545,7 +545,32 @@ void Ndvr::AddNewNamePrefix(uint32_t round) {
 
 void Ndvr::RequestSyncData(const std::string& name) {
   NS_LOG_DEBUG("Sending interest to request data = " << name);
+  //Name n(name);
+
+  Interest interest = Interest();
+  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
+  interest.setName(name);
+  interest.setCanBePrefix(false);
+  interest.setInterestLifetime(time::seconds(m_localRTTimeout));
+
+  m_face.expressInterest(interest,
+    std::bind(&Ndvr::OnSyncDataContent, this, _1, _2),
+    std::bind(&Ndvr::OnSyncDataNack, this, _1, _2),
+    std::bind(&Ndvr::OnSyncDataTimedOut, this, _1));
 }
+
+void Ndvr::OnSyncDataTimedOut(const ndn::Interest& interest) {
+  NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName());
+}
+
+void Ndvr::OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
+  NS_LOG_DEBUG("Received Nack for " << interest.getName() << " with reason: " << nack.getReason());
+}
+
+void Ndvr::OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data) {
+  NS_LOG_DEBUG("Received content for SynData: " << data.getName());
+}
+
 
 } // namespace ndvr
 } // namespace ndn

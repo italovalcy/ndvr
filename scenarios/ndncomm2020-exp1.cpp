@@ -60,7 +60,16 @@ main(int argc, char* argv[])
 
     auto app = DynamicCast<NdvrApp>(node->GetApplication(0));
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
+
+    // Producer
+    ndn::Name namePrefix("/ndn/ndvrSync");
+    namePrefix.appendNumber(idx);
+    ndn::AppHelper producerHelper("ns3::ndn::Producer");
+    producerHelper.SetPrefix(namePrefix.toUri());
+    producerHelper.SetAttribute("PayloadSize", StringValue("300"));
+    producerHelper.Install(node);
   }
+
 
   Simulator::Stop(Seconds(128.0));
 

@@ -137,6 +137,9 @@ private:
   uint64_t ExtractIncomingFace(const ndn::Data& data);
   void RequestSyncData(const std::string& name);
   void AddNewNamePrefix(uint32_t round);
+  void OnSyncDataTimedOut(const ndn::Interest& interest);
+  void OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
+  void OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data);
 
   void
   buildRouterPrefix()
