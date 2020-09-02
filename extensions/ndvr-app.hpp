@@ -23,7 +23,9 @@ public:
       .AddAttribute("Network", "Name of the network the router belongs to in ndn URI format", StringValue("/ndn"),
                     ndn::MakeNameAccessor(&NdvrApp::network_), ndn::MakeNameChecker())
       .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
-                    ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker());
+                    ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker())
+      .AddAttribute("SyncDataOnAddRoute", "If true, request data upon adding a route", BooleanValue(false),
+                    MakeBooleanAccessor(&NdvrApp::syncDataOnAddRoute_), MakeBooleanChecker());
     return tid;
   }
 
@@ -44,6 +46,7 @@ public:
 protected:
   virtual void StartApplication() {
     m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
+    m_instance->EnableSyncDataOnAddRoute(syncDataOnAddRoute_);
     m_instance->Start();
   }
 
@@ -58,6 +61,7 @@ private:
   ndn::Name network_;
   ndn::Name routerName_;
   std::vector<std::string> namePrefixes_;
+  bool syncDataOnAddRoute_;
 };
 
 } // namespace ns3

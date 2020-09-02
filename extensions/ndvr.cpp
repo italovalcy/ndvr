@@ -28,8 +28,12 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   , m_helloIntervalMax(60)
   , m_localRTInterval(1)
   , m_localRTTimeout(1)
+  , m_rengine(rdevice_())
 {
   buildRouterPrefix();
+
+  ns3::Ptr<ns3::Node> thisNode = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
+  m_nodeid = thisNode->GetId();
 
   // TODO: this should be a conf parameter
   std::string fileName = "config/validation.conf";
@@ -60,12 +64,16 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   });
 
   registerPrefixes();
-  m_scheduler.schedule(ndn::time::seconds(1),
-                        [this] { printFib(); });
+//  m_scheduler.schedule(ndn::time::seconds(1),
+//                        [this] { printFib(); });
 }
 
 void Ndvr::Start() {
   SendHelloInterest();
+  if (m_syncDataOnAddRoute) {
+    m_scheduler.schedule(ndn::time::milliseconds(4000 + 10*m_nodeid),
+                        [this] { AddNewNamePrefix(1); });
+  }
 }
 
 void Ndvr::Stop() {
@@ -429,6 +437,10 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
       entry.second.SetFaceId(neighbor.GetFaceId());
       m_routingTable.AddRoute(entry.second);
+      if (m_syncDataOnAddRoute) {
+        m_scheduler.schedule(ndn::time::milliseconds(10 * m_nodeid),
+                        [this, neigh_prefix] { RequestSyncData(neigh_prefix); });
+      }
 
       /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
       ResetHelloInterval();
@@ -500,7 +512,7 @@ Ndvr::isInfinityCost(uint32_t cost) {
   return cost == std::numeric_limits<uint32_t>::max();
 }
 
-void Ndvr::AdvNamePrefix(std::string& name) {
+void Ndvr::AdvNamePrefix(std::string name) {
   RoutingEntry routingEntry;
   routingEntry.SetName(name);
   routingEntry.SetSeqNum(1);
@@ -512,13 +524,27 @@ void Ndvr::AdvNamePrefix(std::string& name) {
    * neighbors about a new DvInfo; otherwise, just insert on the initial
    * routing table
    * */
+  m_routingTable.insert(routingEntry);
   if (sendhello_event) {
-    m_routingTable.AddRoute(routingEntry);
     ResetHelloInterval();
     SendHelloInterest();
-  } else {
-    m_routingTable.insert(routingEntry);
   }
+}
+
+void Ndvr::AddNewNamePrefix(uint32_t round) {
+  ndn::Name namePrefix("/ndn/ndvrSync");
+  namePrefix.appendNumber(m_nodeid).appendNumber(round).appendNumber(0);
+
+  NS_LOG_DEBUG("AdvName = " << namePrefix);
+
+  AdvNamePrefix(namePrefix.toUri());
+
+  m_scheduler.schedule(ndn::time::milliseconds(m_data_gen_dist(m_rengine)),
+                      [this, round] { AddNewNamePrefix(round+1); });
+}
+
+void Ndvr::RequestSyncData(const std::string& name) {
+  NS_LOG_DEBUG("Sending interest to request data = " << name);
 }
 
 } // namespace ndvr

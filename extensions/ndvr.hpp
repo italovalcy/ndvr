@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <random>
 
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/interest.hpp>
@@ -95,13 +96,18 @@ public:
   void run();
   void Start();
   void Stop();
-  void AdvNamePrefix(std::string& name);
+  void AdvNamePrefix(std::string name);
 
   const ndn::Name&
   getRouterPrefix() const
   {
     return m_routerPrefix;
   }
+
+  void EnableSyncDataOnAddRoute(bool enable) {
+    m_syncDataOnAddRoute = enable;
+  }
+
 
 private:
   typedef std::map<std::string, NeighborEntry> NeighborMap;
@@ -129,6 +135,8 @@ private:
   void ResetHelloInterval();
   uint64_t ExtractIncomingFace(const ndn::Interest& interest);
   uint64_t ExtractIncomingFace(const ndn::Data& data);
+  void RequestSyncData(const std::string& name);
+  void AddNewNamePrefix(uint32_t round);
 
   void
   buildRouterPrefix()
@@ -187,6 +195,7 @@ private:
   Name m_routerName;
   ndn::Face m_face;
 
+  uint32_t m_nodeid;
   ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
   NeighborMap m_neighMap;
@@ -196,9 +205,14 @@ private:
   int m_helloIntervalMax;
   int m_localRTInterval;
   int m_localRTTimeout;
+  bool m_syncDataOnAddRoute = false;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
+  std::random_device rdevice_;
+  std::mt19937 m_rengine;
+  int data_generation_rate_mean = 40000;
+  std::poisson_distribution<> m_data_gen_dist = std::poisson_distribution<>(data_generation_rate_mean);
 };
 
 } // namespace ndvr
