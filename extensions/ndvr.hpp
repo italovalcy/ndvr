@@ -104,8 +104,8 @@ public:
     return m_routerPrefix;
   }
 
-  void EnableSyncDataOnAddRoute(bool enable) {
-    m_syncDataOnAddRoute = enable;
+  void SetSyncDataRounds(uint32_t x) {
+    m_syncDataRounds = x;
   }
 
 
@@ -135,9 +135,9 @@ private:
   void ResetHelloInterval();
   uint64_t ExtractIncomingFace(const ndn::Interest& interest);
   uint64_t ExtractIncomingFace(const ndn::Data& data);
-  void RequestSyncData(const std::string& name);
+  void RequestSyncData(const ndn::Name name, uint32_t retx = 0);
   void AddNewNamePrefix(uint32_t round);
-  void OnSyncDataTimedOut(const ndn::Interest& interest);
+  void OnSyncDataTimedOut(const ndn::Interest& interest, uint32_t retx);
   void OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
   void OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data);
 
@@ -208,7 +208,7 @@ private:
   int m_helloIntervalMax;
   int m_localRTInterval;
   int m_localRTTimeout;
-  bool m_syncDataOnAddRoute = false;
+  uint32_t m_syncDataRounds = 0;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
@@ -216,6 +216,7 @@ private:
   std::mt19937 m_rengine;
   int data_generation_rate_mean = 40000;
   std::poisson_distribution<> m_data_gen_dist = std::poisson_distribution<>(data_generation_rate_mean);
+  std::uniform_int_distribution<> packet_dist = std::uniform_int_distribution<>(10000, 15000);   /* microseconds */
 };
 
 } // namespace ndvr

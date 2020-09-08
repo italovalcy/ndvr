@@ -24,8 +24,8 @@ public:
                     ndn::MakeNameAccessor(&NdvrApp::network_), ndn::MakeNameChecker())
       .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
                     ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker())
-      .AddAttribute("SyncDataOnAddRoute", "If true, request data upon adding a route", BooleanValue(false),
-                    MakeBooleanAccessor(&NdvrApp::syncDataOnAddRoute_), MakeBooleanChecker());
+      .AddAttribute("SyncDataRounds", "Number of rounds to run the sync data process", IntegerValue(0),
+                    MakeIntegerAccessor(&NdvrApp::syncDataRounds_), MakeIntegerChecker<int32_t>());
     return tid;
   }
 
@@ -46,7 +46,7 @@ public:
 protected:
   virtual void StartApplication() {
     m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
-    m_instance->EnableSyncDataOnAddRoute(syncDataOnAddRoute_);
+    m_instance->SetSyncDataRounds(syncDataRounds_);
     m_instance->Start();
   }
 
@@ -61,7 +61,7 @@ private:
   ndn::Name network_;
   ndn::Name routerName_;
   std::vector<std::string> namePrefixes_;
-  bool syncDataOnAddRoute_;
+  uint32_t syncDataRounds_;      // number of rounds to sync data (for data sync experiment)
 };
 
 } // namespace ns3
