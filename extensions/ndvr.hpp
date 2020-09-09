@@ -25,9 +25,9 @@
 namespace ndn {
 namespace ndvr {
 
-static const Name kNdvrPrefix = Name("/ndvr");
-static const Name kNdvrHelloPrefix = Name("/ndvr/ehlo");
-static const Name kNdvrDvInfoPrefix = Name("/ndvr/dvinfo");
+static const Name kNdvrPrefix = Name("/localhop/ndvr");
+static const Name kNdvrHelloPrefix = Name("/localhop/ndvr/ehlo");
+static const Name kNdvrDvInfoPrefix = Name("/localhop/ndvr/dvinfo");
 static const std::string kRouterTag = "\%C1.Router";
 
 
