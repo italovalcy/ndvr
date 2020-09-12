@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import json
 
 # Generate data:
@@ -21,8 +22,32 @@ data2 = json.load(f)
 sorted_data2 = np.sort(data2)
 yvals2=np.arange(len(sorted_data2))/float(len(sorted_data2)-1)
 
-plt.plot(sorted_data1,yvals1, label='DDSN')
-plt.plot(sorted_data2,yvals2, label='NDVR')
 plt.legend()
 plt.show()
 
+font = {
+    'family' : 'normal',
+    'weight' : 'normal',
+    'size'   : 14
+}
+matplotlib.rc('font', **font)
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+
+ax.plot(sorted_data1, yvals1, label='DDSN', linestyle='-', linewidth=3)
+ax.plot(sorted_data2, yvals2, label='NDVR', linestyle='-.', linewidth=3)
+
+
+plt.ylim((0, 1))
+plt.xlim((0, 1000))
+plt.xlabel("Delay (s)")
+plt.ylabel("CDF")
+plt.legend(loc = 'center right', fancybox=True)
+plt.grid(True)
+plt.style.use('classic')
+if save:
+    fig.set_size_inches(6, 3)
+    fig.savefig('tmp.pdf', format='pdf', dpi=1000)
+else:
+    plt.show()
