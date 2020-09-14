@@ -14,6 +14,38 @@ namespace ns3 {
 
 NS_OBJECT_ENSURE_REGISTERED(NdvrApp);
 
+uint32_t MacTxDropCount, PhyTxDropCount, PhyRxDropCount;
+//AsciiTraceHelper phydropascii;
+//Ptr<OutputStreamWrapper> stream = phydropascii.CreateFileStream ("phyrxdrop.tr");
+
+void
+MacTxDrop(Ptr<const Packet> p)
+{
+  //NS_LOG_INFO("Packet Drop");
+  MacTxDropCount++;
+}
+
+void
+PhyTxDrop(Ptr<const Packet> p)
+{
+  //NS_LOG_INFO("Packet Drop");
+  PhyTxDropCount++;
+}
+void
+PhyRxDrop(Ptr<const Packet> p, WifiPhyRxfailureReason r)
+{
+  //NS_LOG_INFO("Packet Drop");
+  //*stream->GetStream () << Simulator::Now().GetSeconds() << " PhyRxDrop pkt=" << *p << " reason=" << r << std::endl;
+  PhyRxDropCount++;
+}
+
+void
+PrintDrop()
+{
+  std::cout << Simulator::Now().GetSeconds() << "\t PktDropStats MacTxDrop=" << MacTxDropCount << "\t PhyTxDrop="<< PhyTxDropCount << "\t PhyRxDrop=" << PhyRxDropCount << "\n";
+}
+
+
 int
 main(int argc, char* argv[])
 {
@@ -27,6 +59,7 @@ main(int argc, char* argv[])
   std::string traceFile;
   double distance = 800;
   uint32_t syncDataRounds = 5;
+  bool tracing = false;
 
   CommandLine cmd;
   cmd.AddValue("numNodes", "numNodes", numNodes);
@@ -35,6 +68,7 @@ main(int argc, char* argv[])
   cmd.AddValue ("syncDataRounds", "number of rounds to run the publish / sync Data", syncDataRounds);
   cmd.AddValue("run", "run number", run);
   cmd.AddValue("traceFile", "Ns2 movement trace file", traceFile);
+  cmd.AddValue("tracing", "enable wifi tracing", tracing);
   cmd.Parse(argc, argv);
   RngSeedManager::SetRun (run);
   /* each sync data round interval is ~40s and we give more 3x more time to finish the sync process, plus extra 128s */
@@ -84,6 +118,10 @@ main(int argc, char* argv[])
     mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
     mobility.Install (nodes);
   }
+  if (tracing == true) {
+    AsciiTraceHelper ascii;
+    wifiPhyHelper.EnableAsciiAll (ascii.CreateFileStream ("wifi-tracing.tr"));
+  }
 
 
   // 3. Install NDN stack
@@ -97,6 +135,7 @@ main(int argc, char* argv[])
 
   // 4. Set Forwarding Strategy
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
+  //ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
 
   // Security - create root cert (to be used as trusted anchor later)
   std::string network = "/ndn";
@@ -129,6 +168,11 @@ main(int argc, char* argv[])
     producerHelper.Install(node);
   }
 
+  // Trace Collisions
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/MacTxDrop", MakeCallback(&MacTxDrop));
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/PhyRxDrop", MakeCallback(&PhyRxDrop));
+  Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/PhyTxDrop", MakeCallback(&PhyTxDrop));
+  Simulator::Schedule(Seconds(sim_time - 5), &PrintDrop);
 
   Simulator::Stop(Seconds(sim_time));
 
