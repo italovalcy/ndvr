@@ -116,6 +116,7 @@ private:
   void OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId);
   void OnKeyInterest(const ndn::Interest& interest);
   void OnDvInfoInterest(const ndn::Interest& interest);
+  void ReplyDvInfoInterest(const ndn::Interest& interest);
   void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
   void OnDvInfoTimedOut(const ndn::Interest& interest);
   void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
@@ -212,8 +213,10 @@ private:
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
+  scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
   std::random_device rdevice_;
   std::mt19937 m_rengine;
+  std::uniform_int_distribution<> replydvinfo_dist = std::uniform_int_distribution<>(100, 150);   /* milliseconds */
   int data_generation_rate_mean = 40000;
   std::poisson_distribution<> m_data_gen_dist = std::poisson_distribution<>(data_generation_rate_mean);
   std::uniform_int_distribution<> packet_dist = std::uniform_int_distribution<>(10000, 15000);   /* microseconds */

@@ -53,7 +53,13 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
     routingEntry.SetFaceId(0); /* directly connected */
     m_routingTable.insert(routingEntry);
   }
-  m_face.setInterestFilter(kNdvrPrefix, std::bind(&Ndvr::processInterest, this, _2),
+  m_face.setInterestFilter(kNdvrHelloPrefix, std::bind(&Ndvr::processInterest, this, _2),
+    [this](const Name&, const std::string& reason) {
+      throw Error("Failed to register sync interest prefix: " + reason);
+  });
+  Name routerDvInfoPrefix = kNdvrDvInfoPrefix;
+  routerDvInfoPrefix.append(m_routerPrefix);
+  m_face.setInterestFilter(routerDvInfoPrefix, std::bind(&Ndvr::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);
   });
@@ -131,7 +137,8 @@ Ndvr::registerPrefixes() {
     NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
 
     NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
-    FibHelper::AddRoute(thisNode, kNdvrPrefix, face, metric);
+    FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
+    FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
   }
 
 }
@@ -284,7 +291,16 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
     return;
   }
 
-  // TODO: send our DV-Info
+  /* group DvInfo replies to avoid duplicates */
+  if (replydvinfo_event)
+    return;
+  replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
+      [this, interest] {
+        ReplyDvInfoInterest(interest);
+      });
+}
+
+void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(100));
   // Set dvinfo
