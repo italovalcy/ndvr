@@ -1,0 +1,184 @@
+diff --git a/extensions/ndvr.cpp b/extensions/ndvr.cpp
+index 7711b55..61174a5 100644
+--- a/extensions/ndvr.cpp
++++ b/extensions/ndvr.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include "ndvr.hpp"
+ #include <limits>
++#include <cmath>
+ #include <ns3/simulator.h>
+ #include <ns3/log.h>
+ #include <ns3/ptr.h>
+@@ -166,11 +167,34 @@ Ndvr::SendHelloInterest() {
+                                         [this] { SendHelloInterest(); });
+ }
+ 
++void Ndvr::SchedDvInfoInterest(NeighborEntry& neighbor) {
++  auto n = neighbor.GetName();
++
++  /* is there any other DvInfo interest scheduled? if so, skip */
++  auto n_event = dvinfointerest_event.find(n);
++  if (n_event != dvinfointerest_event.end() && n_event->second)
++    return;
++
++  uint32_t max_rand = pow(2, m_c) - 1;
++  std::uniform_int_distribution<int> rand(0, max_rand);
++  int backoffTime = rand(m_rengine)*m_slotTime;
++  
++  if (backoffTime > 500000)
++    backoffTime = 500000;
++
++  dvinfointerest_event[n] = m_scheduler.schedule(
++                                time::microseconds(backoffTime),
++                                [this, n] { SendDvInfoInterest(n); });
++}
++
+ void
+-Ndvr::SendDvInfoInterest(NeighborEntry& neighbor) {
+-  NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
++Ndvr::SendDvInfoInterest(const std::string& neighbor_name) {
++  /* cleanup scheduled event */
++  dvinfointerest_event.erase(neighbor_name);
++
++  NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor_name);
+   Name name = Name(kNdvrDvInfoPrefix);
+-  name.append(neighbor.GetName());
++  name.append(neighbor_name);
+   name.appendNumber(ns3::Simulator::Now().GetSeconds()); /* XXX: another way would be the
+                                                             node send the version on the 
+                                                             hello message */
+@@ -278,7 +302,7 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
+     IncreaseHelloInterval();
+     //return;
+   }
+-  SendDvInfoInterest(neigh->second);
++  SchedDvInfoInterest(neigh->second);
+ }
+ 
+ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
+@@ -292,17 +316,19 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
+   }
+ 
+   /* group DvInfo replies to avoid duplicates */
+-  if (replydvinfo_event)
+-    return;
+-  replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
+-      [this, interest] {
+-        ReplyDvInfoInterest(interest);
+-      });
++  //if (replydvinfo_event)
++  //  return;
++  //replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
++  //replydvinfo_event = m_scheduler.schedule(time::microseconds(m_slotTime),
++  //    [this, interest] {
++  //      ReplyDvInfoInterest(interest);
++  //    });
++  ReplyDvInfoInterest(interest);
+ }
+ 
+diff --git a/extensions/ndvr.hpp b/extensions/ndvr.hpp
+index 904d3ea..4da5127 100644
+--- a/extensions/ndvr.hpp
++++ b/extensions/ndvr.hpp
+@@ -6,6 +6,7 @@
+ 
+ #include <iostream>
+ #include <map>
++#include <unordered_map>
+ #include <string>
+ #include <random>
+ 
+@@ -120,7 +121,8 @@ private:
+   void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
+   void OnDvInfoTimedOut(const ndn::Interest& interest);
+   void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
+-  void SendDvInfoInterest(NeighborEntry& neighbor);
++  void SchedDvInfoInterest(NeighborEntry& neighbor);
++  void SendDvInfoInterest(const std::string& neighbor_name);
+   void OnValidatedDvInfo(const ndn::Data& data);
+   void OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve);
+   void SendHelloInterest();
+@@ -210,6 +212,20 @@ private:
+   int m_localRTInterval;
+   int m_localRTTimeout;
+   uint32_t m_syncDataRounds = 0;
++  /* m_slotTime (microseconds)
++   * SlotTime is the time to transmit a frame on the physical medium
++   * (e.g., 802.3 100Mbps is 51us, 802.11b is 20us, 802.11ac is 9us, 
++   * etc.). Should be a configuration parameter */
++  uint32_t m_slotTime = 150000;
++  /* m_c
++   * Let m_c be the cth try to avoid sending a redundant DvInfo interest.
++   * It starts with 1 and can increase if we still detect redundant 
++   * DvInfo interest.
++   * */
++  uint32_t m_c = 3;
++  /* For DvInfo interest suppression */
++  std::unordered_map<std::string, scheduler::EventId> dvinfointerest_event;
++
+ 
+   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
+   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
+@@ -220,6 +236,7 @@ private:
+   int data_generation_rate_mean = 40000;
+   std::poisson_distribution<> m_data_gen_dist = std::poisson_distribution<>(data_generation_rate_mean);
+   std::uniform_int_distribution<> packet_dist = std::uniform_int_distribution<>(10000, 15000);   /* microseconds */
++
+ };
+ 
+ } // namespace ndvr
+diff --git a/scenarios/ndncomm2020-exp1.cpp b/scenarios/ndncomm2020-exp1.cpp
+index 925d4ed..8abc158 100644
+--- a/scenarios/ndncomm2020-exp1.cpp
++++ b/scenarios/ndncomm2020-exp1.cpp
+@@ -3,6 +3,7 @@
+ #include "ndvr-app.hpp"
+ #include "ndvr-security-helper.hpp"
+ #include "wifi-adhoc-helper.hpp"
++#include "admit-localhop-unsolicited-data-policy.hpp"
+ 
+ #include "ns3/core-module.h"
+ #include "ns3/network-module.h"
+@@ -18,6 +19,12 @@ uint32_t MacTxDropCount, PhyTxDropCount, PhyRxDropCount;
+ //AsciiTraceHelper phydropascii;
+ //Ptr<OutputStreamWrapper> stream = phydropascii.CreateFileStream ("phyrxdrop.tr");
+ 
++void setUnsolicitedDataPolicy(Ptr<Node> node) {
++  unique_ptr<::nfd::fw::UnsolicitedDataPolicy> unsolicitedDataPolicy;
++  unsolicitedDataPolicy = ::nfd::fw::UnsolicitedDataPolicy::create("admit-localhop");
++  node->GetObject<ndn::L3Protocol>()->getForwarder()->setUnsolicitedDataPolicy(std::move(unsolicitedDataPolicy));
++}
++
+ void
+ MacTxDrop(Ptr<const Packet> p)
+ {
+@@ -135,7 +142,7 @@ main(int argc, char* argv[])
+ 
+   // 4. Set Forwarding Strategy
+   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
+-  //ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
++  ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
+ 
+   // Security - create root cert (to be used as trusted anchor later)
+   std::string network = "/ndn";
+@@ -145,14 +152,17 @@ main(int argc, char* argv[])
+   uint64_t idx = 0;
+   for (NodeContainer::Iterator i = nodes.Begin(); i != nodes.End(); ++i, idx++) {
+     Ptr<Node> node = *i;    /* This is NS3::Node, not ndn::Node */
+-    std::string routerName = "/\%C1.Router/Router"+std::to_string(idx);
+ 
++    // change the unsolicited data policy to save in cache localhop messages
++    setUnsolicitedDataPolicy(node);
++
++    // NDVR
+     ndn::AppHelper appHelper("NdvrApp");
+     appHelper.SetAttribute("Network", StringValue("/ndn"));
++    std::string routerName = "/\%C1.Router/Router"+std::to_string(idx);
+     appHelper.SetAttribute("RouterName", StringValue(routerName));
+     appHelper.SetAttribute("SyncDataRounds", IntegerValue(syncDataRounds));
+     appHelper.Install(node).Start(MilliSeconds(10*idx));
+-
+     auto app = DynamicCast<NdvrApp>(node->GetApplication(0));
+     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
+ 
