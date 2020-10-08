@@ -58,8 +58,14 @@ LocalhopStrategy::afterReceiveInterest(const FaceEndpoint& ingress, const Intere
 
     if ((outFace.getId() == ingress.face.getId() && outFace.getLinkType() != ndn::nfd::LINK_TYPE_AD_HOC) ||
         my_wouldViolateScope(ingress.face, interest, outFace)) {
+      // even when it violete the scope, we need to check the supress result in order to decide
+      // whether remove the Pit entry or just the InRecord
+      if (suppressResult == RetxSuppressionResult::SUPPRESS)
+        isSuppressed = true;
       continue;
     }
+
+    ++nEligibleNextHops;
 
     if (suppressResult == RetxSuppressionResult::SUPPRESS) {
       NFD_LOG_DEBUG(interest << " from=" << ingress << " to=" << outFace.getId() << " suppressed");
@@ -73,9 +79,14 @@ LocalhopStrategy::afterReceiveInterest(const FaceEndpoint& ingress, const Intere
     if (suppressResult == RetxSuppressionResult::FORWARD) {
       m_retxSuppression.incrementIntervalForOutRecord(*pitEntry->getOutRecord(outFace));
     }
-    ++nEligibleNextHops;
   }
-  if (nEligibleNextHops == 0 && !isSuppressed) {
+  if (nEligibleNextHops > 0)
+    return;
+
+  if (isSuppressed) {
+    NFD_LOG_DEBUG(interest << " from=" << ingress << " noNextHop: deleteInRecord");
+    pitEntry->deleteInRecord(ingress.face);
+  } else {
     NFD_LOG_DEBUG(interest << " from=" << ingress << " noNextHop: rejectPendingInterest");
     this->rejectPendingInterest(pitEntry);
   }
