@@ -8,9 +8,9 @@ import json
 import argparse
 
 parser = argparse.ArgumentParser(description='Plot data retrieve delay for DDSN and NDVR')
-parser.add_argument('--ndvr', metavar='FILE', nargs='+', required=True,
+parser.add_argument('--ndvr', metavar='FILE', nargs='+', required=False, default=[],
                     help='filename containing the logs for NDVR')
-parser.add_argument('--ddsn', metavar='FILE', nargs='+', required=True,
+parser.add_argument('--ddsn', metavar='FILE', nargs='+', required=False, default=[],
                     help='filename containing the logs for DDNS')
 parser.add_argument('--tofile', metavar='FILE', type=str, nargs='?',
                     help='filename to save data')

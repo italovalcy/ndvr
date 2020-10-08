@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import sem, t
 import argparse
 
 parser = argparse.ArgumentParser(description='Process log file for NDVR to calculate data retrieval delay')
@@ -48,7 +49,12 @@ for line in file:
         if data_info.count == int(0.9*args.num_nodes):
             sync_duration_all.append(data_info.last_seen - data_info.adv_time)
 
-print "data sync duration (mean) = " + str(np.mean(sync_duration_all))
+data = sync_duration_all
+confidence = 0.95
+mean = np.mean(data)
+intv = sem(data) * t.ppf((1 + confidence) / 2, len(data) - 1)
+print "data sync duration = %f +- %f " % (mean, intv)
+
 import json
 with open(args.output, "w") as f:
     f.write(json.dumps(sync_duration))

@@ -10,9 +10,9 @@ APP=$2
 
 case "$APP" in
     ndvr)
-        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingInterest(): [DEBUG] onOutgoingInterest out=(257,0) interest=/localhop/ndvr/ehlo/"   results/run-$RUN/ndncomm2020-exp1.log > results/overhead-ndvr-ehlointers-$RUN
-        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingInterest(): [DEBUG] onOutgoingInterest out=(257,0) interest=/localhop/ndvr/dvinfo/" results/run-$RUN/ndncomm2020-exp1.log > results/overhead-ndvr-dvinfointe-$RUN
-        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingData(): [DEBUG] onOutgoingData out=(257,0) data=/localhop/ndvr/dvinfo/"             results/run-$RUN/ndncomm2020-exp1.log > results/overhead-ndvr-dvinfodata-$RUN
+        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingInterest(): [DEBUG] onOutgoingInterest out=(257,0) interest=/localhop/ndvr/ehlo/"   results/run-$RUN/*.log > results/overhead-ndvr-ehlointers-$RUN
+        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingInterest(): [DEBUG] onOutgoingInterest out=(257,0) interest=/localhop/ndvr/dvinfo/" results/run-$RUN/*.log > results/overhead-ndvr-dvinfointe-$RUN
+        fgrep "ndn-cxx.nfd.Forwarder:onOutgoingData(): [DEBUG] onOutgoingData out=(257,0) data=/localhop/ndvr/dvinfo/"             results/run-$RUN/*.log > results/overhead-ndvr-dvinfodata-$RUN
         echo "Overhead NDVR $RUN:"
         wc -l results/overhead-ndvr-*-$RUN
         ;;
