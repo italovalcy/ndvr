@@ -302,7 +302,7 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   auto data = std::make_shared<ndn::Data>(interest.getName());
-  data->setFreshnessPeriod(ndn::time::milliseconds(100));
+  data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
   std::string dvinfo_str;
   EncodeDvInfo(dvinfo_str);
