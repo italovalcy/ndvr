@@ -15,6 +15,7 @@
 #include <ndn-cxx/security/signing-helpers.hpp>
 #include <ndn-cxx/security/validator-config.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
+#include <ndn-cxx/util/time.hpp>
 #include <ns3/core-module.h>
 #include <ns3/random-variable-stream.h>
 
@@ -41,6 +42,7 @@ public:
     : m_name(name)
     , m_faceId(faceId)
     , m_version(ver)
+    , m_lastSeen(time::steady_clock::now())
   {
   }
 
@@ -73,11 +75,26 @@ public:
   uint64_t GetFaceId() {
     return m_faceId;
   }
+  void UpdateLastSeen() {
+    m_lastSeen = time::steady_clock::now();
+  }
+  time::seconds GetLastSeenDelta() {
+    return time::duration_cast<time::seconds>(time::steady_clock::now() - m_lastSeen);
+  }
+  void SetHelloTimeout(time::seconds t) {
+    m_helloTimeout = t;
+  }
+  time::seconds GetHelloTimeout() {
+    return m_helloTimeout;;
+  }
+public:
+  scheduler::EventId removal_event;
 private:
   std::string m_name;
   uint64_t m_faceId;
   uint64_t m_version;
-  //TODO: lastSeen
+  time::steady_clock::TimePoint m_lastSeen;
+  time::seconds m_helloTimeout;
   //TODO: key  
 };
 
@@ -108,6 +125,9 @@ public:
     m_syncDataRounds = x;
   }
 
+  void EnableDynamicFaces(bool flag) {
+    m_enableDynamicFaces = flag;
+  }
 
 private:
   typedef std::map<std::string, NeighborEntry> NeighborMap;
@@ -118,9 +138,9 @@ private:
   void OnDvInfoInterest(const ndn::Interest& interest);
   void ReplyDvInfoInterest(const ndn::Interest& interest);
   void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
-  void OnDvInfoTimedOut(const ndn::Interest& interest);
+  void OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx);
   void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
-  void SendDvInfoInterest(NeighborEntry& neighbor);
+  void SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx = 0);
   void OnValidatedDvInfo(const ndn::Data& data);
   void OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve);
   void SendHelloInterest();
@@ -141,6 +161,10 @@ private:
   void OnSyncDataTimedOut(const ndn::Interest& interest, uint32_t retx);
   void OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
   void OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data);
+  void UpdateNeighHelloTimeout(NeighborEntry& neighbor);
+  void RescheduleNeighRemoval(NeighborEntry& neighbor);
+  void RemoveNeighbor(const std::string neigh);
+  uint64_t CreateUnicastFace(std::string mac);
 
   void
   buildRouterPrefix()
@@ -210,6 +234,8 @@ private:
   int m_localRTInterval;
   int m_localRTTimeout;
   uint32_t m_syncDataRounds = 0;
+  bool m_enableDynamicFaces = true;
+  std::string m_macaddr;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */

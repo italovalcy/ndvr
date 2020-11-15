@@ -10,6 +10,10 @@
 #include <ns3/ndnSIM/helper/ndn-stack-helper.hpp>
 #include <ndn-cxx/lp/tags.hpp>
 
+#include "ns3/ndnSIM/model/ndn-l3-protocol.hpp"
+#include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
+#include "unicast-net-device-transport.hpp"
+
 NS_LOG_COMPONENT_DEFINE("ndn.Ndvr");
 
 namespace ndn {
@@ -139,6 +143,12 @@ Ndvr::registerPrefixes() {
     NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
     FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
     FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
+    
+    auto addr = device->GetAddress();
+    if (m_enableDynamicFaces && Mac48Address::IsMatchingType(addr)) {
+      m_macaddr = boost::lexical_cast<std::string>(Mac48Address::ConvertFrom(addr));
+      NS_LOG_DEBUG("Save mac =" << m_macaddr);
+    }
   }
 
 }
@@ -157,6 +167,9 @@ Ndvr::SendHelloInterest() {
   interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setInterestLifetime(time::milliseconds(0));
+  if (m_enableDynamicFaces) {
+    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(m_macaddr.data()), m_macaddr.size());
+  }
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
@@ -167,7 +180,56 @@ Ndvr::SendHelloInterest() {
 }
 
 void
-Ndvr::SendDvInfoInterest(NeighborEntry& neighbor) {
+Ndvr::UpdateNeighHelloTimeout(NeighborEntry& neighbor) {
+  auto diff = neighbor.GetLastSeenDelta();
+  time::seconds timeout = time::seconds(1) + 2*std::max(time::seconds(m_helloIntervalIni), diff);
+  neighbor.SetHelloTimeout(timeout);
+}
+
+void
+Ndvr::RescheduleNeighRemoval(NeighborEntry& neighbor) {
+  neighbor.removal_event.cancel();
+  const std::string neigh_prefix = neighbor.GetName();
+  neighbor.removal_event = m_scheduler.schedule(neighbor.GetHelloTimeout(),
+                            [this, neigh_prefix] { RemoveNeighbor(neigh_prefix); });
+  neighbor.UpdateLastSeen();
+}
+
+void
+Ndvr::RemoveNeighbor(const std::string neigh) {
+  NS_LOG_INFO("Remove neighbor=" << neigh);
+
+  auto neigh_it = m_neighMap.find(neigh);
+  if (neigh_it == m_neighMap.end()) {
+    return;
+  }
+
+  bool need_adv = false;
+
+  // remove all routes whose next-hop is this neighbor (instead of remove, we increase the cost)
+  for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
+    if (it->second.isNextHop(neigh_it->second.GetFaceId())) {
+      it->second.SetCost(neigh_it->second.GetFaceId(),
+          std::numeric_limits<uint32_t>::max());
+      need_adv = true;
+    }
+  }
+
+  // remove from neighbor map
+  m_neighMap.erase(neigh);
+
+  // insert into recently removed
+  // TODO
+
+  if (need_adv) {
+    /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
+    ResetHelloInterval();
+    SendHelloInterest();
+  }
+}
+
+void
+Ndvr::SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx) {
   NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
   Name name = Name(kNdvrDvInfoPrefix);
   name.append(neighbor.GetName());
@@ -185,7 +247,7 @@ Ndvr::SendDvInfoInterest(NeighborEntry& neighbor) {
   m_face.expressInterest(interest,
     std::bind(&Ndvr::OnDvInfoContent, this, _1, _2),
     std::bind(&Ndvr::OnDvInfoNack, this, _1, _2),
-    std::bind(&Ndvr::OnDvInfoTimedOut, this, _1));
+    std::bind(&Ndvr::OnDvInfoTimedOut, this, _1, retx));
 
   // Not necessary anymore, since the DvInfo is sent on demand (when receiving an ehlo)
   //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Ndvr::SendDvInfoInterest, this, neighbor);
@@ -260,12 +322,18 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
     NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
+  std::string mac;
+  mac.assign((char *)interest.getApplicationParameters().value(), interest.getApplicationParameters().value_size());
+  NS_LOG_INFO("mac == " << mac);
   auto neigh = m_neighMap.find(neighPrefix);
   if (neigh == m_neighMap.end()) {
     ResetHelloInterval();
-    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
+    uint64_t neighFaceId = CreateUnicastFace(mac);
+    //neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
+    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, neighFaceId, 0)).first;
     uint64_t oldFaceId = 0;
-    registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
+    //registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
+    registerNeighborPrefix(neigh->second, oldFaceId, neighFaceId);
   } else {
     NS_LOG_INFO("Already known router, increasing the hello interval");
     if (neigh->second.GetFaceId() != inFaceId) {
@@ -278,6 +346,8 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
     IncreaseHelloInterval();
     //return;
   }
+  UpdateNeighHelloTimeout(neigh->second);
+  RescheduleNeighRemoval(neigh->second);
   SendDvInfoInterest(neigh->second);
 }
 
@@ -332,10 +402,30 @@ void Ndvr::OnKeyInterest(const ndn::Interest& interest) {
   }
 }
 
-void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest) {
-  NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName());
+void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx) {
   // TODO: Apply the same logic as in HelloProtocol::processInterestTimedOut (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
   // TODO: what if node has moved?
+  NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName()<< " retx=" << retx);
+
+  /* what is the maximum retransmission? Just 1?*/
+  if (retx > 1)
+    return;
+
+  /* Sanity checks */
+  std::string neighPrefix = ExtractRouterPrefix(interest.getName(), kNdvrDvInfoPrefix);
+  if (!isValidRouter(interest.getName(), kNdvrDvInfoPrefix) || neighPrefix == m_routerPrefix) {
+    return;
+  }
+  auto neigh_it = m_neighMap.find(neighPrefix);
+  if (neigh_it == m_neighMap.end()) {
+    return;
+  }
+
+  /* is it worth to send a DvInfo now instead of waiting the next hello/dvinfo exchange cycle? */
+  // if (neigh_it->second.GetLastSeenDelta() >= m_helloIntervalCur -1)
+  //   return
+
+  SendDvInfoInterest(neigh_it->second, retx+1);
 }
 
 void Ndvr::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
@@ -397,6 +487,9 @@ void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
     NS_LOG_INFO("Discard DvInfo from unknonw neighbor=" << neighPrefix);
     return;
   }
+
+  /* Update lastSeen and reschedule neighbor removal */
+  RescheduleNeighRemoval(neigh_it->second);
 
   /* Extract DvInfo and process Distance Vector update */
   const auto& content = data.getContent();
@@ -549,6 +642,34 @@ void Ndvr::AdvNamePrefix(std::string name) {
     ResetHelloInterval();
     SendHelloInterest();
   }
+}
+
+uint64_t Ndvr::CreateUnicastFace(std::string mac) {
+  ns3::Ptr<ns3::Node> thisNode = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
+  ns3::Ptr<ns3::NetDevice> netDevice = thisNode->GetDevice(0);
+  ns3::Ptr<ns3::ndn::L3Protocol> ndn = thisNode->GetObject<ns3::ndn::L3Protocol>();
+  std::string myUrl = "netdev://[" + boost::lexical_cast<std::string>(ns3::Mac48Address::ConvertFrom(netDevice->GetAddress())) + "]";
+  //std::string neighUri = "netdev://[" + mac + "]";
+
+  // Create an ndnSIM-specific transport instance
+  ::nfd::face::GenericLinkService::Options opts;
+  opts.allowFragmentation = true;
+  opts.allowReassembly = true;
+  opts.allowCongestionMarking = true;
+
+  auto linkService = std::make_unique<::nfd::face::GenericLinkService>(opts);
+
+
+  auto transport = std::make_unique<ns3::ndn::UnicastNetDeviceTransport>(thisNode, netDevice,
+                                                   myUrl,
+                                                   //neighUri);
+                                                   mac);
+  auto face = std::make_shared<::nfd::face::Face>(std::move(linkService), std::move(transport));
+  face->setMetric(1);
+
+  ndn->addFace(face);
+
+  return face->getId();
 }
 
 void Ndvr::AddNewNamePrefix(uint32_t round) {

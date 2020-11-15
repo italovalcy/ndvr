@@ -54,6 +54,11 @@ public:
     m_cost = cost;
   }
 
+  void SetCost(uint64_t faceId, uint32_t cost) {
+    // TODO: set cost only for this faceId
+    m_cost = cost;
+  }
+
   uint32_t GetCost() {
     return m_cost;
   }

@@ -135,7 +135,7 @@ main(int argc, char* argv[])
 
   // 4. Set Forwarding Strategy
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
-  //ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
+  ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
 
   // Security - create root cert (to be used as trusted anchor later)
   std::string network = "/ndn";
