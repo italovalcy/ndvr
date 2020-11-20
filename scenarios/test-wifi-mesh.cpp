@@ -65,7 +65,7 @@ main(int argc, char* argv[])
   int range = 60;
   std::string traceFile;
   double distance = 800;
-  uint32_t syncDataRounds = 5;
+  uint32_t syncDataRounds = 0;
   bool tracing = false;
 
   CommandLine cmd;
