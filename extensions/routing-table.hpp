@@ -102,7 +102,11 @@ class RoutingTable {
 public:
   std::map<std::string, RoutingEntry> m_rt;
 
-  RoutingTable() {}
+  RoutingTable()
+    : m_version(1)
+  {
+  }
+
   ~RoutingTable() {}
 
   void UpdateRoute(RoutingEntry& e, uint64_t new_nh);
@@ -113,6 +117,13 @@ public:
   bool LookupRoute(std::string n, RoutingEntry& e);
   void insert(RoutingEntry& e);
 
+  uint32_t GetVersion() {
+    return m_version;
+  }
+  void IncVersion() {
+    m_version++;
+  }
+
   // just forward some methods
   decltype(m_rt.begin()) begin() { return m_rt.begin(); }
   decltype(m_rt.end()) end() { return m_rt.end(); }
@@ -120,6 +131,9 @@ public:
 private:
   void unregisterPrefix(std::string name, uint64_t faceId);
   void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
+
+private:
+  uint32_t m_version;
 };
 
 } // namespace ndvr

@@ -27,7 +27,7 @@ namespace ndn {
 namespace ndvr {
 
 static const Name kNdvrPrefix = Name("/localhop/ndvr");
-static const Name kNdvrHelloPrefix = Name("/localhop/ndvr/ehlo");
+static const Name kNdvrHelloPrefix = Name("/localhop/ndvr/dvannc");
 static const Name kNdvrDvInfoPrefix = Name("/localhop/ndvr/dvinfo");
 static const std::string kRouterTag = "\%C1.Router";
 
@@ -60,15 +60,10 @@ public:
   void SetVersion(uint64_t ver) {
     m_version = ver;
   }
-  void IncVersion() {
-    m_version++;
-  }
   uint64_t GetVersion() {
     return m_version;
   }
-  uint64_t GetNextVersion() {
-    return m_version++;
-  }
+
   void SetFaceId(uint64_t faceId) {
     m_faceId = faceId;
   }
@@ -205,6 +200,14 @@ private:
    */
   std::string ExtractRouterPrefix(const Name& name, const Name& prefix) {
     return name.getSubName(prefix.size(), 3).toUri();
+  }
+
+  uint32_t ExtractVersionFromAnnounce(const Name& name) {
+    return name.get(-1).toNumber();
+  }
+
+  uint32_t ExtractNumPrefixesFromAnnounce(const Name& name) {
+    return name.get(-2).toNumber();
   }
 
   const ndn::security::SigningInfo&

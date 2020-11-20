@@ -143,12 +143,6 @@ Ndvr::registerPrefixes() {
     NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
     FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
     FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
-    
-    auto addr = device->GetAddress();
-    if (m_enableDynamicFaces && Mac48Address::IsMatchingType(addr)) {
-      m_macaddr = boost::lexical_cast<std::string>(Mac48Address::ConvertFrom(addr));
-      NS_LOG_DEBUG("Save mac =" << m_macaddr);
-    }
   }
 
 }
@@ -160,6 +154,8 @@ Ndvr::SendHelloInterest() {
 
   Name name = Name(kNdvrHelloPrefix);
   name.append(getRouterPrefix());
+  name.appendNumber(m_routingTable.size());
+  name.appendNumber(m_routingTable.GetVersion());
   NS_LOG_INFO("Sending Interest " << name);
 
   Interest interest = Interest();
@@ -167,9 +163,6 @@ Ndvr::SendHelloInterest() {
   interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setInterestLifetime(time::milliseconds(0));
-  if (m_enableDynamicFaces) {
-    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(m_macaddr.data()), m_macaddr.size());
-  }
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
@@ -233,9 +226,7 @@ Ndvr::SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx) {
   NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
   Name name = Name(kNdvrDvInfoPrefix);
   name.append(neighbor.GetName());
-  name.appendNumber(ns3::Simulator::Now().GetSeconds()); /* XXX: another way would be the
-                                                            node send the version on the 
-                                                            hello message */
+  name.appendNumber(neighbor.GetVersion());
 
   Interest interest = Interest();
   interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
@@ -322,18 +313,16 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
     NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
-  std::string mac;
-  mac.assign((char *)interest.getApplicationParameters().value(), interest.getApplicationParameters().value_size());
-  NS_LOG_INFO("mac == " << mac);
+  uint32_t numPrefixes = ExtractNumPrefixesFromAnnounce(interestName);
+  uint32_t version = ExtractVersionFromAnnounce(interestName);
   auto neigh = m_neighMap.find(neighPrefix);
+  bool newNeigh = false;
   if (neigh == m_neighMap.end()) {
     ResetHelloInterval();
-    uint64_t neighFaceId = CreateUnicastFace(mac);
-    //neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
-    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, neighFaceId, 0)).first;
+    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, version)).first;
     uint64_t oldFaceId = 0;
-    //registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
-    registerNeighborPrefix(neigh->second, oldFaceId, neighFaceId);
+    registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
+    newNeigh = true;
   } else {
     NS_LOG_INFO("Already known router, increasing the hello interval");
     if (neigh->second.GetFaceId() != inFaceId) {
@@ -348,7 +337,10 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   }
   UpdateNeighHelloTimeout(neigh->second);
   RescheduleNeighRemoval(neigh->second);
-  SendDvInfoInterest(neigh->second);
+  if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion())) {
+    neigh->second.SetVersion(version);
+    SendDvInfoInterest(neigh->second);
+  }
 }
 
 void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
