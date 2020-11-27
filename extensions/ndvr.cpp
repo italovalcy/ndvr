@@ -175,7 +175,7 @@ Ndvr::SendHelloInterest() {
 void
 Ndvr::UpdateNeighHelloTimeout(NeighborEntry& neighbor) {
   auto diff = neighbor.GetLastSeenDelta();
-  time::seconds timeout = time::seconds(1) + 2*std::max(time::seconds(m_helloIntervalIni), diff);
+  time::seconds timeout = time::seconds(3) + 2*std::max(time::seconds(m_helloIntervalIni), diff);
   neighbor.SetHelloTimeout(timeout);
 }
 
@@ -204,8 +204,12 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
     if (it->second.isNextHop(neigh_it->second.GetFaceId())) {
       it->second.SetCost(neigh_it->second.GetFaceId(),
           std::numeric_limits<uint32_t>::max());
+      it->second.IncSeqNum(1);
       need_adv = true;
     }
+    /* For local routes, increment the seqNum by 2 */
+    if (it->second.isDirectRoute())
+      it->second.IncSeqNum(2);
   }
 
   // remove from neighbor map
@@ -412,6 +416,11 @@ void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx) {
   if (neigh_it == m_neighMap.end()) {
     return;
   }
+  uint32_t version = ExtractVersionFromAnnounce(interest.getName());
+  if (version < neigh_it->second.GetVersion()) {
+    /* there is a newer version, so no sense retransmite this */
+    return;
+  }
 
   /* is it worth to send a DvInfo now instead of waiting the next hello/dvinfo exchange cycle? */
   // if (neigh_it->second.GetLastSeenDelta() >= m_helloIntervalCur -1)
@@ -510,10 +519,6 @@ void Ndvr::OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::
 void Ndvr::EncodeDvInfo(std::string& out) {
   proto::DvInfo dvinfo_proto;
   for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
-    /* For local routes, increment the seqNum */
-    if (it->second.isDirectRoute())
-      it->second.IncSeqNum();
-
     auto* entry = dvinfo_proto.add_entry();
     entry->set_prefix(it->first);
     entry->set_seq(it->second.GetSeqNum());
@@ -525,6 +530,8 @@ void Ndvr::EncodeDvInfo(std::string& out) {
 void
 Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) {
   NS_LOG_INFO("Process DvInfo from neighbor=" << neighbor.GetName());
+  bool has_changed = false;
+
   for (auto entry : otherRT) {
     std::string neigh_prefix = entry.first;
     uint64_t neigh_seq = entry.second.GetSeqNum();
@@ -547,9 +554,7 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
                         [this, neigh_prefix] { RequestSyncData(ndn::Name(neigh_prefix)); });
       }
 
-      /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
-      ResetHelloInterval();
-      SendHelloInterest();
+      has_changed = true;
       continue;
     }
 
@@ -562,29 +567,29 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       NS_LOG_INFO("======>> Infinity cost! Remove name prefix" << neigh_prefix);
       m_routingTable.DeleteRoute(localRE, neighbor.GetFaceId());
 
-      /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
-      ResetHelloInterval();
-      SendHelloInterest();
+      has_changed = true;
       continue;
     }
 
     /* compare the Received and Local SeqNum (in Routing Entry)*/
     neigh_cost = CalculateCostToNeigh(neighbor, neigh_cost);
     if (neigh_seq > localRE.GetSeqNum()) {
-      NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << localRE.GetSeqNum());
       // TODO:
       //   - Recv_Cost == Local_cost: update Local_SeqNum
       //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
       if (localRE.GetCost() == neigh_cost) {
+        NS_LOG_INFO("======>> New SeqNum same cost, update name prefix! local_seqNum=" << localRE.GetSeqNum() << " neigh_seqNum=" << neigh_seq);
         if (!localRE.isNextHop(neighbor.GetFaceId())) {
           /* TODO: if they have the same cost but from different faces, could save for multipath */
         }
         localRE.SetSeqNum(neigh_seq);
       } else {
+        NS_LOG_INFO("======>> New SeqNum diff cost, update name prefix! local_seqNum=" << localRE.GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE.GetCost() << " neigh_cost=" << neigh_cost);
         /* Cost change will be handle by periodic updates */
         localRE.SetCost(neigh_cost);
         localRE.SetSeqNum(neigh_seq);
         m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
+        has_changed = true;
       }
     } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost < localRE.GetCost()) {
       NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE.GetCost());
@@ -592,6 +597,7 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       // TODO: wait SettlingTime, then update Local_Cost
       localRE.SetCost(neigh_cost);
       m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
+      has_changed = true;
     } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost >= localRE.GetCost()) {
       //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE.GetCost());
       // TODO: save this new prefix as well to multipath
@@ -599,6 +605,13 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
       continue;
     }
+  }
+
+  if (has_changed) {
+    m_routingTable.IncVersion();
+    /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
+    ResetHelloInterval();
+    SendHelloInterest();
   }
 }
 
@@ -630,6 +643,7 @@ void Ndvr::AdvNamePrefix(std::string name) {
    * routing table
    * */
   m_routingTable.insert(routingEntry);
+  m_routingTable.IncVersion();
   if (sendhello_event) {
     ResetHelloInterval();
     SendHelloInterest();

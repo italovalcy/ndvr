@@ -42,8 +42,8 @@ public:
     m_seqNum = seqNum;
   }
 
-  void IncSeqNum() {
-    m_seqNum += 1;
+  void IncSeqNum(uint64_t i) {
+    m_seqNum += i;
   }
 
   uint64_t GetSeqNum() {
