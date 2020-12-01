@@ -242,7 +242,7 @@ private:
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
-  scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
+  //scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
   std::random_device rdevice_;
   std::mt19937 m_rengine;
   std::uniform_int_distribution<> replydvinfo_dist = std::uniform_int_distribution<>(100, 150);   /* milliseconds */

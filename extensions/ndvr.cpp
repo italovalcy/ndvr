@@ -358,12 +358,13 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   }
 
   /* group DvInfo replies to avoid duplicates */
-  if (replydvinfo_event)
-    return;
-  replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
-      [this, interest] {
-        ReplyDvInfoInterest(interest);
-      });
+  //if (replydvinfo_event)
+  //  return;
+  //replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
+  //    [this, interest] {
+  //      ReplyDvInfoInterest(interest);
+  //    });
+  ReplyDvInfoInterest(interest);
 }
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
