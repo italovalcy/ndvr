@@ -218,16 +218,16 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
   // insert into recently removed
   // TODO
 
-  if (need_adv) {
-    /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
-    ResetHelloInterval();
-    SendHelloInterest();
-  }
+  //if (need_adv) {
+  //  /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
+  //  ResetHelloInterval();
+  //  SendHelloInterest();
+  //}
 }
 
 void
 Ndvr::SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx) {
-  NS_LOG_INFO("Sending DV-Info Interest to neighbor=" << neighbor.GetName());
+  NS_LOG_INFO("Sending DV-Info Interest retx=" << retx << " to neighbor=" << neighbor.GetName());
   Name name = Name(kNdvrDvInfoPrefix);
   name.append(neighbor.GetName());
   name.appendNumber(neighbor.GetVersion());
@@ -322,7 +322,7 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   auto neigh = m_neighMap.find(neighPrefix);
   bool newNeigh = false;
   if (neigh == m_neighMap.end()) {
-    ResetHelloInterval();
+    //ResetHelloInterval();
     neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, version)).first;
     uint64_t oldFaceId = 0;
     registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
@@ -336,7 +336,7 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
       //NS_LOG_INFO("Neighbor moved from faceId=" << neigh->second.GetFaceId() << " to faceId=" << inFaceId << " neigh=" << neighPrefix);
       //registerNeighborPrefix(neigh->second, neigh->second.GetFaceId(), inFaceId);
     }
-    IncreaseHelloInterval();
+    //IncreaseHelloInterval();
     //return;
   }
   UpdateNeighHelloTimeout(neigh->second);
@@ -402,6 +402,7 @@ void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx) {
   // TODO: Apply the same logic as in HelloProtocol::processInterestTimedOut (~/mini-ndn/ndn-src/NLSR/src/hello-protocol.cpp)
   // TODO: what if node has moved?
   NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName()<< " retx=" << retx);
+  return;
 
   /* what is the maximum retransmission? Just 1?*/
   if (retx > 1)
@@ -610,8 +611,8 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
   if (has_changed) {
     m_routingTable.IncVersion();
     /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
-    ResetHelloInterval();
-    SendHelloInterest();
+    //ResetHelloInterval();
+    //SendHelloInterest();
   }
 }
 
@@ -644,10 +645,10 @@ void Ndvr::AdvNamePrefix(std::string name) {
    * */
   m_routingTable.insert(routingEntry);
   m_routingTable.IncVersion();
-  if (sendhello_event) {
-    ResetHelloInterval();
-    SendHelloInterest();
-  }
+  //if (sendhello_event) {
+  //  ResetHelloInterval();
+  //  SendHelloInterest();
+  //}
 }
 
 uint64_t Ndvr::CreateUnicastFace(std::string mac) {
