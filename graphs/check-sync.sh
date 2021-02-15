@@ -10,7 +10,7 @@ fi
 
 RESULT=$(for prefix in `egrep 'AddNewNamePrefix.*AdvName = /ndn/ndvrSync/' $LOG | awk '{print $NF}'`; do R=$(egrep "OnSyncDataContent.* $prefix" $LOG); echo $prefix --- num_sync=$(echo "$R" | wc -l); done)
 
-if echo "$RESULT" | grep -q -v "num_sync=$((NUM_NODES - 1))"; then
+if echo "$RESULT" | egrep -q -v "num_sync=$((NUM_NODES - 1))|num_sync=$NUM_NODES"; then
     echo "--> sync failed:"
     echo "$RESULT" | grep -v "num_sync=$((NUM_NODES - 1))"
 else

@@ -2,6 +2,10 @@
 
 #include "ndvr.hpp"
 #include <limits>
+#include <cmath>
+#include <boost/algorithm/string.hpp> 
+#include <algorithm>
+#include <boost/uuid/sha1.hpp>
 #include <ns3/simulator.h>
 #include <ns3/log.h>
 #include <ns3/ptr.h>
@@ -34,6 +38,7 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   , m_localRTInterval(1)
   , m_localRTTimeout(1)
   , m_rengine(rdevice_())
+  , m_pivot(m_neighMap.end())
 {
   buildRouterPrefix();
 
@@ -143,8 +148,45 @@ Ndvr::registerPrefixes() {
     NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
     FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
     FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
+
+    auto addr = device->GetAddress();
+    if (m_enableUnicastFaces && Mac48Address::IsMatchingType(addr)) {
+      m_macaddr = boost::lexical_cast<std::string>(Mac48Address::ConvertFrom(addr));
+      NS_LOG_DEBUG("Save mac =" << m_macaddr);
+    }
   }
 
+}
+
+std::string
+Ndvr::GetNeighborToken() {
+  std::string res;
+
+  if (!m_neighMap.size()) {
+    m_pivot = m_neighMap.end();
+    return res;
+  }
+
+  if (m_pivot == m_neighMap.end() || ++m_pivot == m_neighMap.end()) {
+    m_pivot = m_neighMap.begin();
+    /* go to a random position */
+    std::uniform_int_distribution<int> rand(0, m_neighMap.size() - 1);
+    int r = rand(m_rengine);
+    for (;r>0;r--)
+      m_pivot++;
+  }
+  res.append(m_pivot->first);
+
+  if (m_neighMap.size() == 1)
+    return res;
+
+  if (++m_pivot == m_neighMap.end()) {
+    m_pivot = m_neighMap.begin();
+  }
+  res.append("&");
+  res.append(m_pivot->first);
+
+  return res;
 }
 
 void
@@ -155,6 +197,7 @@ Ndvr::SendHelloInterest() {
   Name name = Name(kNdvrHelloPrefix);
   name.append(getRouterPrefix());
   name.appendNumber(m_routingTable.size());
+  name.append(m_routingTable.GetDigest());
   name.appendNumber(m_routingTable.GetVersion());
   NS_LOG_INFO("Sending Interest " << name);
 
@@ -163,6 +206,18 @@ Ndvr::SendHelloInterest() {
   interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setInterestLifetime(time::milliseconds(0));
+  std::string params;
+  if (m_neighMap.size() > 0) {
+    auto neighbors_token = GetNeighborToken();
+    NS_LOG_INFO("neighbors_token " << neighbors_token);
+    params = neighbors_token;
+  }
+  if (m_enableUnicastFaces) {
+    params = params + "&" + m_macaddr;
+  }
+  if (!params.empty()) {
+    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(params.data()), params.size());
+  }
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
@@ -197,7 +252,7 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
     return;
   }
 
-  bool need_adv = false;
+  //bool need_adv = false;
 
   // remove all routes whose next-hop is this neighbor (instead of remove, we increase the cost)
   for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
@@ -205,7 +260,7 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
       it->second.SetCost(neigh_it->second.GetFaceId(),
           std::numeric_limits<uint32_t>::max());
       it->second.IncSeqNum(1);
-      need_adv = true;
+      //need_adv = true;
     }
     /* For local routes, increment the seqNum by 2 */
     if (it->second.isDirectRoute())
@@ -214,6 +269,7 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
 
   // remove from neighbor map
   m_neighMap.erase(neigh);
+  m_pivot = m_neighMap.end();
 
   // insert into recently removed
   // TODO
@@ -225,11 +281,56 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
   //}
 }
 
+void Ndvr::SchedDvInfoInterest(NeighborEntry& neighbor, bool wait, uint32_t retx) {
+  auto n = neighbor.GetName();
+
+  /* is there any other DvInfo interest scheduled? if so, skip */
+  auto n_event = dvinfointerest_event.find(n);
+  if (n_event != dvinfointerest_event.end() && n_event->second)
+    return;
+
+  /* exponential Backoff */
+  /*
+  uint32_t max_rand = pow(2, m_c) - 1;
+  std::uniform_int_distribution<int> rand(0, max_rand);
+  int r = rand(m_rengine);
+  int backoffTime = r*m_slotTime;
+
+  if (backoffTime > 500000)
+    backoffTime = 500000;
+
+  // random factor to avoid tx collisions
+  backoffTime += 10000*m_nodeid;
+
+  NS_LOG_INFO("SchedDvInfoInterest name=" << n << " rand=" << r << " backoffTime=" << backoffTime);
+  */
+
+  /* token based Backoff */
+  int backoffTime = 0;
+  if (wait)
+    backoffTime = 750000;
+  backoffTime += 5000*m_nodeid;
+  NS_LOG_INFO("SchedDvInfoInterest name=" << n << " wait=" << wait << " backoffTime=" << backoffTime);
+
+  dvinfointerest_event[n] = m_scheduler.schedule(
+                                time::microseconds(backoffTime),
+                                [this, n, retx] { SendDvInfoInterest(n, retx); });
+}
+
 void
-Ndvr::SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx) {
-  NS_LOG_INFO("Sending DV-Info Interest retx=" << retx << " to neighbor=" << neighbor.GetName());
+Ndvr::SendDvInfoInterest(const std::string& neighbor_name, uint32_t retx) {
+  /* cleanup scheduled event */
+  dvinfointerest_event.erase(neighbor_name);
+
+  auto neigh_it = m_neighMap.find(neighbor_name);
+  if (neigh_it == m_neighMap.end()) {
+    return;
+  }
+  auto neighbor = neigh_it->second;
+
+  NS_LOG_INFO("Sending DV-Info Interest retx=" << retx << " to neighbor=" << neighbor_name);
   Name name = Name(kNdvrDvInfoPrefix);
-  name.append(neighbor.GetName());
+  name.append(neighbor_name);
   name.appendNumber(neighbor.GetVersion());
 
   Interest interest = Interest();
@@ -317,12 +418,38 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
     NS_LOG_INFO("Hello from myself, ignoring...");
     return;
   }
+
   uint32_t numPrefixes = ExtractNumPrefixesFromAnnounce(interestName);
+  std::string digest = ExtractDigestFromAnnounce(interestName);
   uint32_t version = ExtractVersionFromAnnounce(interestName);
+  std::vector<std::string> params;
+  if (interest.hasApplicationParameters() && interest.getApplicationParameters().value_size() > 0) {
+    std::string s;
+    s.assign((char *)interest.getApplicationParameters().value(), interest.getApplicationParameters().value_size());
+    NS_LOG_INFO("Neighbor=" << neighPrefix <<  " params=" << s);
+    boost::split(params, s, boost::is_any_of("&"));
+  }
+  std::string neigh_mac;
+  if (m_enableUnicastFaces) {
+    neigh_mac = params.back();
+    params.pop_back();
+    NS_LOG_INFO("Neighbor_mac == " << neigh_mac);
+  }
+
   auto neigh = m_neighMap.find(neighPrefix);
   bool newNeigh = false;
   if (neigh == m_neighMap.end()) {
     //ResetHelloInterval();
+    if (m_enableUnicastFaces && !neigh_mac.empty()) {
+      auto neighFaceId_it = m_neighToFaceId.find(neighPrefix);
+      if (neighFaceId_it == m_neighToFaceId.end()) {
+        uint64_t neighFaceId = CreateUnicastFace(neigh_mac);
+        NS_LOG_INFO("NEW-Neighbor_FaceId == " << neighFaceId << " mac = " << neigh_mac);
+        m_neighToFaceId.emplace(neighPrefix, neighFaceId);
+      } else {
+        NS_LOG_INFO("EXISTING-Neighbor_FaceId == " << neighFaceId_it->second << " mac = " << neigh_mac);
+      }
+    }
     neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, version)).first;
     uint64_t oldFaceId = 0;
     registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
@@ -341,9 +468,23 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   }
   UpdateNeighHelloTimeout(neigh->second);
   RescheduleNeighRemoval(neigh->second);
-  if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion())) {
+  if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion()) && numPrefixes >= m_routingTable.size()) {
     neigh->second.SetVersion(version);
-    SendDvInfoInterest(neigh->second);
+
+    /* does we really have a change? */
+    if (digest != "0" && digest == m_routingTable.GetDigest()) {
+      NS_LOG_INFO("Same digest, so there was no change! digest=" << digest);
+      return;
+    }
+
+    /* should we request immediatly or wait? */
+    bool wait = true;
+    auto it = std::find(params.begin(), params.end(), m_routerPrefix);
+    if (it != params.end())
+      wait = false;
+    SchedDvInfoInterest(neigh->second, wait);
+  } else {
+    NS_LOG_INFO("Skipped DvInfoInterest numPrefixes=" << numPrefixes << " m_routingTable.size()=" << m_routingTable.size() << " newNeigh=" << newNeigh << " version=" << version << " saved_version=" << neigh->second.GetVersion());
   }
 }
 
@@ -358,13 +499,12 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
   }
 
   /* group DvInfo replies to avoid duplicates */
-  //if (replydvinfo_event)
-  //  return;
-  //replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
-  //    [this, interest] {
-  //      ReplyDvInfoInterest(interest);
-  //    });
-  ReplyDvInfoInterest(interest);
+  if (replydvinfo_event)
+    return;
+  replydvinfo_event = m_scheduler.schedule(time::milliseconds(replydvinfo_dist(m_rengine)),
+      [this, interest] {
+        ReplyDvInfoInterest(interest);
+      });
 }
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
@@ -428,7 +568,7 @@ void Ndvr::OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx) {
   // if (neigh_it->second.GetLastSeenDelta() >= m_helloIntervalCur -1)
   //   return
 
-  SendDvInfoInterest(neigh_it->second, retx+1);
+  SchedDvInfoInterest(neigh_it->second, retx+1);
 }
 
 void Ndvr::OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
@@ -516,6 +656,29 @@ void Ndvr::OnValidatedDvInfo(const ndn::Data& data) {
 
 void Ndvr::OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve) {
   NS_LOG_DEBUG("Not validated data: " << data.getName() << ". The failure info: " << ve);
+}
+
+void Ndvr::UpdateRoutingTableDigest() {
+  proto::DvInfo to_calc_digest;
+  std::string str_digest;
+  for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
+    auto* e2 = to_calc_digest.add_entry();
+    e2->set_prefix(it->first);
+    e2->set_seq(it->second.GetSeqNum());
+    e2->set_cost(0);
+  }
+  to_calc_digest.AppendToString(&str_digest);
+  boost::uuids::detail::sha1 sha1;
+  unsigned int hash[5];
+  sha1.process_bytes(str_digest.c_str(), str_digest.size());
+  sha1.get_digest(hash);
+  std::stringstream stream;
+  for(std::size_t i=0; i<sizeof(hash)/sizeof(hash[0]); ++i) {
+      stream << std::hex << hash[i];
+  }
+  std::string res = stream.str();
+  NS_LOG_DEBUG("RoutingTable_digest: " << res);
+  m_routingTable.SetDigest(res);
 }
 
 void Ndvr::EncodeDvInfo(std::string& out) {
@@ -611,6 +774,7 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
 
   if (has_changed) {
     m_routingTable.IncVersion();
+    //UpdateRoutingTableDigest();
     /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
     //ResetHelloInterval();
     //SendHelloInterest();

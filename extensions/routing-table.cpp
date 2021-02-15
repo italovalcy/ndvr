@@ -1,4 +1,9 @@
+#include <sstream> 
+#include <string>
+#include <boost/uuid/sha1.hpp>
+
 #include "routing-table.hpp"
+
 #include <ns3/ndnSIM/helper/ndn-fib-helper.hpp>
 #include <ns3/simulator.h>
 #include <ns3/ptr.h>
@@ -56,6 +61,7 @@ void RoutingTable::UpdateRoute(RoutingEntry& e, uint64_t new_nh) {
 void RoutingTable::AddRoute(RoutingEntry& e) {
   registerPrefix(e.GetName(), e.GetFaceId(), e.GetCost());
   m_rt[e.GetName()] = e;
+  UpdateDigest();
 }
 
 void RoutingTable::DeleteRoute(RoutingEntry& e, uint64_t nh) {
@@ -63,10 +69,26 @@ void RoutingTable::DeleteRoute(RoutingEntry& e, uint64_t nh) {
   // In that case, we should only remove the nexthop
   unregisterPrefix(e.GetName(), nh);
   m_rt.erase(e.GetName());
+  UpdateDigest();
 }
 
 void RoutingTable::insert(RoutingEntry& e) {
   m_rt[e.GetName()] = e;
+  UpdateDigest();
+}
+
+void RoutingTable::UpdateDigest() {
+  std::stringstream rt_str, out;
+  boost::uuids::detail::sha1 sha1;
+  unsigned int hash[5];
+  for (auto it = m_rt.begin(); it != m_rt.end(); ++it)
+    rt_str << it->first << it->second.GetSeqNum();
+  sha1.process_bytes(rt_str.str().c_str(), rt_str.str().size());
+  sha1.get_digest(hash);
+  for(std::size_t i=0; i<sizeof(hash)/sizeof(hash[0]); ++i) {
+      out << std::hex << hash[i];
+  }
+  m_digest = out.str();
 }
 
 } // namespace ndvr

@@ -3,6 +3,7 @@
 #include "ndvr-app.hpp"
 #include "ndvr-security-helper.hpp"
 #include "wifi-adhoc-helper.hpp"
+#include "admit-localhop-unsolicited-data-policy.hpp"
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -17,6 +18,12 @@ NS_OBJECT_ENSURE_REGISTERED(NdvrApp);
 uint32_t MacTxDropCount, PhyTxDropCount, PhyRxDropCount;
 //AsciiTraceHelper phydropascii;
 //Ptr<OutputStreamWrapper> stream = phydropascii.CreateFileStream ("phyrxdrop.tr");
+
+void setUnsolicitedDataPolicy(Ptr<Node> node) {
+  unique_ptr<::nfd::fw::UnsolicitedDataPolicy> unsolicitedDataPolicy;
+  unsolicitedDataPolicy = ::nfd::fw::UnsolicitedDataPolicy::create("admit-localhop");
+  node->GetObject<ndn::L3Protocol>()->getForwarder()->setUnsolicitedDataPolicy(std::move(unsolicitedDataPolicy));
+}
 
 void
 MacTxDrop(Ptr<const Packet> p)
@@ -121,6 +128,7 @@ main(int argc, char* argv[])
   if (tracing == true) {
     AsciiTraceHelper ascii;
     wifiPhyHelper.EnableAsciiAll (ascii.CreateFileStream ("wifi-tracing.tr"));
+    wifiPhyHelper.EnablePcap ("ndncomm", wifiNetDevices);
   }
 
 
@@ -134,6 +142,7 @@ main(int argc, char* argv[])
   ndnHelper.Install(nodes);
 
   // 4. Set Forwarding Strategy
+  //ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/m-asf");
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
   ndn::StrategyChoiceHelper::Install(nodes, "/localhop/ndvr", "/localhost/nfd/strategy/localhop");
 
@@ -146,6 +155,9 @@ main(int argc, char* argv[])
   for (NodeContainer::Iterator i = nodes.Begin(); i != nodes.End(); ++i, idx++) {
     Ptr<Node> node = *i;    /* This is NS3::Node, not ndn::Node */
     std::string routerName = "/\%C1.Router/Router"+std::to_string(idx);
+
+    // change the unsolicited data policy to save in cache localhop messages
+    setUnsolicitedDataPolicy(node);
 
     ndn::AppHelper appHelper("NdvrApp");
     appHelper.SetAttribute("Network", StringValue("/ndn"));

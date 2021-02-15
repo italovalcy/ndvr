@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <random>
 
@@ -120,8 +121,8 @@ public:
     m_syncDataRounds = x;
   }
 
-  void EnableDynamicFaces(bool flag) {
-    m_enableDynamicFaces = flag;
+  void EnableUnicastFaces(bool flag) {
+    m_enableUnicastFaces = flag;
   }
 
 private:
@@ -135,7 +136,8 @@ private:
   void OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data);
   void OnDvInfoTimedOut(const ndn::Interest& interest, uint32_t retx);
   void OnDvInfoNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
-  void SendDvInfoInterest(NeighborEntry& neighbor, uint32_t retx = 0);
+  void SchedDvInfoInterest(NeighborEntry& neighbor, bool wait = false, uint32_t retx = 0);
+  void SendDvInfoInterest(const std::string& neighbor_name, uint32_t retx = 0);
   void OnValidatedDvInfo(const ndn::Data& data);
   void OnDvInfoValidationFailed(const ndn::Data& data, const ndn::security::v2::ValidationError& ve);
   void SendHelloInterest();
@@ -160,6 +162,8 @@ private:
   void RescheduleNeighRemoval(NeighborEntry& neighbor);
   void RemoveNeighbor(const std::string neigh);
   uint64_t CreateUnicastFace(std::string mac);
+  std::string GetNeighborToken();
+  void UpdateRoutingTableDigest();
 
   void
   buildRouterPrefix()
@@ -202,12 +206,34 @@ private:
     return name.getSubName(prefix.size(), 3).toUri();
   }
 
-  uint32_t ExtractVersionFromAnnounce(const Name& name) {
-    return name.get(-1).toNumber();
+  /** @brief Extracts the number of prefixes annouced by the neighbor
+   *
+   * @param name: The interest name received from a neighbor. It 
+   * should be formatted:
+   *    <NDVR_HELLO_PREFIX>/<network>/%C1.Router/<router_name>/<num_prefix>/<digest>/<version>(/<params>?)
+   */
+  uint32_t ExtractNumPrefixesFromAnnounce(const Name& name) {
+    return name.get(kNdvrHelloPrefix.size()+3).toNumber();
   }
 
-  uint32_t ExtractNumPrefixesFromAnnounce(const Name& name) {
-    return name.get(-2).toNumber();
+  /** @brief Extracts the digest annouced by the neighbor
+   *
+   * @param name: The interest name received from a neighbor. It 
+   * should be formatted:
+   *    <NDVR_HELLO_PREFIXX>/<network>/%C1.Router/<router_name>/<num_prefix>/<digest>/<version>(/<params>?)
+   */
+  std::string ExtractDigestFromAnnounce(const Name& name) {
+    return name.get(kNdvrHelloPrefix.size()+3+1).toUri();
+  }
+
+  /** @brief Extracts the version annouced by the neighbor
+   *
+   * @param name: The interest name received from a neighbor. It 
+   * should be formatted:
+   *    <NDVR_HELLO_PREFIXX>/<network>/%C1.Router/<router_name>/<num_prefix>/<digest>/<version>(/<params>?)
+   */
+  uint32_t ExtractVersionFromAnnounce(const Name& name) {
+    return name.get(kNdvrHelloPrefix.size()+3+2).toNumber();
   }
 
   const ndn::security::SigningInfo&
@@ -230,6 +256,7 @@ private:
   ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
   NeighborMap m_neighMap;
+  std::map<std::string, uint64_t> m_neighToFaceId;
   RoutingTable m_routingTable;
   int m_helloIntervalIni;
   int m_helloIntervalCur;
@@ -237,18 +264,35 @@ private:
   int m_localRTInterval;
   int m_localRTTimeout;
   uint32_t m_syncDataRounds = 0;
-  bool m_enableDynamicFaces = true;
+  bool m_enableUnicastFaces = true;
   std::string m_macaddr;
+  /* m_slotTime (microseconds)
+   * SlotTime is the time to transmit a frame on the physical medium
+   * (e.g., 802.3 100Mbps is 51us, 802.11b is 20us, 802.11ac is 9us,
+   * etc.). Should be a configuration parameter */
+  uint32_t m_slotTime = 40000;
+  /* m_c
+   * Let m_c be the cth try to avoid sending a redundant DvInfo interest.
+   * It starts with 1 and can increase if we still detect redundant
+   * DvInfo interest.
+   * */
+  uint32_t m_c = 4;
+  /* For DvInfo interest suppression */
+  std::unordered_map<std::string, scheduler::EventId> dvinfointerest_event;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
-  //scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
+  scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
   std::random_device rdevice_;
   std::mt19937 m_rengine;
   std::uniform_int_distribution<> replydvinfo_dist = std::uniform_int_distribution<>(100, 150);   /* milliseconds */
   int data_generation_rate_mean = 40000;
   std::poisson_distribution<> m_data_gen_dist = std::poisson_distribution<>(data_generation_rate_mean);
   std::uniform_int_distribution<> packet_dist = std::uniform_int_distribution<>(10000, 15000);   /* microseconds */
+
+  /* m_pivot (int) - iteractor for the circular list of neighbors
+   * which points to the next neighbors with priority to get DvInfo */
+  NeighborMap::iterator m_pivot;
 };
 
 } // namespace ndvr

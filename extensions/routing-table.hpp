@@ -34,7 +34,7 @@ public:
     m_name = name;
   }
 
-  std::string GetName() {
+  std::string GetName() const {
     return m_name;
   }
 
@@ -100,10 +100,13 @@ private:
 //class RoutingTable : public std::map<std::string, RoutingEntry> {
 class RoutingTable {
 public:
+  /* The fact that the elements in a map are always sorted by its key 
+   * is important for us for the digest calculation */
   std::map<std::string, RoutingEntry> m_rt;
 
   RoutingTable()
     : m_version(1)
+    , m_digest("0")
   {
   }
 
@@ -116,12 +119,20 @@ public:
   bool LookupRoute(std::string n);
   bool LookupRoute(std::string n, RoutingEntry& e);
   void insert(RoutingEntry& e);
+  void UpdateDigest();
 
   uint32_t GetVersion() {
     return m_version;
   }
   void IncVersion() {
     m_version++;
+  }
+
+  std::string GetDigest() const {
+    return m_digest;
+  }
+  void SetDigest(std::string s) {
+    m_digest = s;
   }
 
   // just forward some methods
@@ -134,6 +145,7 @@ private:
 
 private:
   uint32_t m_version;
+  std::string m_digest;
 };
 
 } // namespace ndvr

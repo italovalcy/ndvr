@@ -52,7 +52,8 @@ matplotlib.rc('font', **font)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 
-ax.plot(sorted_data1, yvals1, label='DDSN', linestyle='-', linewidth=3)
+#ax.plot(sorted_data1, yvals1, label='DDSN', linestyle='-', linewidth=3)
+ax.plot(sorted_data1, yvals1, label='Flood', linestyle='-', linewidth=3)
 ax.plot(sorted_data2, yvals2, label='NDVR', linestyle='-.', linewidth=3)
 
 
