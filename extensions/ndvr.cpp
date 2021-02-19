@@ -597,22 +597,6 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
     NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
   }
 
-  /* Check for overheard DvInfo */
-  auto neigh_it = m_neighMap.find(neighPrefix);
-  if (neigh_it == m_neighMap.end()) {
-    uint64_t oldFaceId = 0;
-    uint64_t inFaceId = ExtractIncomingFace(data);
-    if (inFaceId) {
-      NS_LOG_INFO("Overheard DvInfo neigh=" << neighPrefix << " inFaceId=" << inFaceId);
-      neigh_it = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, 0)).first;
-      registerNeighborPrefix(neigh_it->second, oldFaceId, inFaceId);
-    } else {
-      NS_LOG_INFO("Discarding Overheard DvInfo neigh=" << neighPrefix << " inFaceId=" << inFaceId << " (invalid IncomingFace)");
-      return;
-    }
-  } else {
-    //NS_LOG_DEBUG("Neighbor already known: neighbor=" << neighPrefix << " faceId=" << neigh_it->second.GetFaceId());
-  }
 
   // Validating data
   m_validator.validate(data,
