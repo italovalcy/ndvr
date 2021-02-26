@@ -1,4 +1,5 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+#include <math.h>
 
 #include "ndvr-app.hpp"
 #include "simplepubsub-app.hpp"
@@ -117,7 +118,7 @@ main(int argc, char* argv[])
                                    "MinY", DoubleValue (0.0),
                                    "DeltaX", DoubleValue (distance),
                                    "DeltaY", DoubleValue (distance),
-                                   //"GridWidth", UintegerValue (5),
+                                   "GridWidth", UintegerValue (ceil(sqrt(numNodes))),
                                    "LayoutType", StringValue ("RowFirst"));
     mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
     mobility.Install (nodes);
