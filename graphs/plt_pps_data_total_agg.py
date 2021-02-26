@@ -17,6 +17,8 @@ parser.add_argument('--masf', metavar='FILE', required=True,
                     help='filename containing the data')
 parser.add_argument('--flood', metavar='FILE', required=True,
                     help='filename containing the data')
+parser.add_argument('--ndvr_ubest', metavar='FILE', required=True,
+                    help='filename containing the data')
 parser.add_argument('--seconds', type=int, required=True,
                     help='Number of seconds')
 parser.add_argument('--aggregate', type=int, required=False, default=1,
@@ -26,7 +28,7 @@ parser.add_argument('--output', metavar='FILE', type=str, nargs='?',
 
 args = parser.parse_args()
 
-strategies = ['ndvr_mcast', 'ndvr_masf', 'masf', 'mcast']
+strategies = ['ndvr_mcast', 'ndvr_masf', 'masf', 'mcast', 'ndvr_ubest']
 
 data = {}
 with open(args.ndvr_mcast) as f:
@@ -37,7 +39,8 @@ with open(args.masf) as f:
     data['masf'] = json.load(f)
 with open(args.flood) as f:
     data['mcast'] = json.load(f)
-
+with open(args.ndvr_ubest) as f:
+    data['ndvr_ubest'] = json.load(f)
 
 data_agg = {}
 total_agg = {}
@@ -109,7 +112,7 @@ plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=Fa
 
 intervals = np.array(range(0, args.seconds/args.aggregate))*args.aggregate
 
-styles = ['-', '--', '-.', ':']
+styles = ['-', '--', '-.', ':', '-']
 
 for s, ls in zip(strategies, styles):
     #axs[0].plot(intervals, result_data[s],  label = s, linewidth=width)
