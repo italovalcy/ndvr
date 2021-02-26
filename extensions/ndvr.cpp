@@ -42,9 +42,6 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
 {
   buildRouterPrefix();
 
-  ns3::Ptr<ns3::Node> thisNode = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
-  m_nodeid = thisNode->GetId();
-
   // TODO: this should be a conf parameter
   std::string fileName = "config/validation.conf";
   try {
@@ -86,10 +83,6 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
 
 void Ndvr::Start() {
   SendHelloInterest();
-  if (m_syncDataRounds) {
-    m_scheduler.schedule(ndn::time::milliseconds(4000 + 10*m_nodeid),
-                        [this] { AddNewNamePrefix(1); });
-  }
 }
 
 void Ndvr::Stop() {
@@ -309,7 +302,8 @@ void Ndvr::SchedDvInfoInterest(NeighborEntry& neighbor, bool wait, uint32_t retx
   int backoffTime = 0;
   if (wait)
     backoffTime = 750000;
-  backoffTime += 5000*m_nodeid;
+  /* workaround to avoid wifi collisions */
+  backoffTime += 10*m_rand->GetValue(0, 19999);
   NS_LOG_INFO("SchedDvInfoInterest name=" << n << " wait=" << wait << " backoffTime=" << backoffTime);
 
   dvinfointerest_event[n] = m_scheduler.schedule(
@@ -702,10 +696,6 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
       entry.second.SetFaceId(neighbor.GetFaceId());
       m_routingTable.AddRoute(entry.second);
-      if (m_syncDataRounds) {
-        m_scheduler.schedule(ndn::time::microseconds(packet_dist(m_rengine)),
-                        [this, neigh_prefix] { RequestSyncData(ndn::Name(neigh_prefix)); });
-      }
 
       has_changed = true;
       continue;
@@ -831,50 +821,5 @@ uint64_t Ndvr::CreateUnicastFace(std::string mac) {
 
   return face->getId();
 }
-
-void Ndvr::AddNewNamePrefix(uint32_t round) {
-  /* stop data gen process after the configured max rounds */
-  if (round > m_syncDataRounds) 
-    return;
-
-  ndn::Name namePrefix("/ndn/ndvrSync");
-  namePrefix.appendNumber(m_nodeid).appendNumber(round).appendNumber(0);
-
-  NS_LOG_DEBUG("AdvName = " << namePrefix);
-
-  AdvNamePrefix(namePrefix.toUri());
-
-  m_scheduler.schedule(ndn::time::milliseconds(m_data_gen_dist(m_rengine)),
-                      [this, round] { AddNewNamePrefix(round+1); });
-}
-
-void Ndvr::RequestSyncData(const ndn::Name name, uint32_t retx) {
-  NS_LOG_DEBUG("Sending Data interest i.name=" << name << " i.retx=" << retx);
-
-  Interest interest = Interest(name);
-  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
-  interest.setCanBePrefix(false);
-  interest.setInterestLifetime(time::seconds(m_localRTTimeout));
-
-  m_face.expressInterest(interest,
-    std::bind(&Ndvr::OnSyncDataContent, this, _1, _2),
-    std::bind(&Ndvr::OnSyncDataNack, this, _1, _2),
-    std::bind(&Ndvr::OnSyncDataTimedOut, this, _1, retx));
-}
-
-void Ndvr::OnSyncDataTimedOut(const ndn::Interest& interest, uint32_t retx) {
-  NS_LOG_DEBUG("Interest timed out for Name: " << interest.getName() << " retx=" << retx);
-  RequestSyncData(interest.getName(), retx+1);
-}
-
-void Ndvr::OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack) {
-  NS_LOG_DEBUG("Received Nack for " << interest.getName() << " with reason: " << nack.getReason());
-}
-
-void Ndvr::OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data) {
-  NS_LOG_DEBUG("Received content for SynData: " << data.getName());
-}
-
-
 } // namespace ndvr
 } // namespace ndn

@@ -117,10 +117,6 @@ public:
     return m_routerPrefix;
   }
 
-  void SetSyncDataRounds(uint32_t x) {
-    m_syncDataRounds = x;
-  }
-
   void EnableUnicastFaces(bool flag) {
     m_enableUnicastFaces = flag;
   }
@@ -153,11 +149,6 @@ private:
   void ResetHelloInterval();
   uint64_t ExtractIncomingFace(const ndn::Interest& interest);
   uint64_t ExtractIncomingFace(const ndn::Data& data);
-  void RequestSyncData(const ndn::Name name, uint32_t retx = 0);
-  void AddNewNamePrefix(uint32_t round);
-  void OnSyncDataTimedOut(const ndn::Interest& interest, uint32_t retx);
-  void OnSyncDataNack(const ndn::Interest& interest, const ndn::lp::Nack& nack);
-  void OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data);
   void UpdateNeighHelloTimeout(NeighborEntry& neighbor);
   void RescheduleNeighRemoval(NeighborEntry& neighbor);
   void RemoveNeighbor(const std::string neigh);
@@ -252,7 +243,6 @@ private:
   Name m_routerName;
   ndn::Face m_face;
 
-  uint32_t m_nodeid;
   ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
   NeighborMap m_neighMap;
@@ -263,7 +253,6 @@ private:
   int m_helloIntervalMax;
   int m_localRTInterval;
   int m_localRTTimeout;
-  uint32_t m_syncDataRounds = 0;
   bool m_enableUnicastFaces = true;
   std::string m_macaddr;
   /* m_slotTime (microseconds)

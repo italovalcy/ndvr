@@ -24,7 +24,7 @@ public:
                     ndn::MakeNameAccessor(&NdvrApp::network_), ndn::MakeNameChecker())
       .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
                     ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker())
-      .AddAttribute("SyncDataRounds", "Number of rounds to run the sync data process", IntegerValue(0),
+      .AddAttribute("SyncDataRounds", "Deprecated: Number of rounds to run the sync data process", IntegerValue(0),
                     MakeIntegerAccessor(&NdvrApp::syncDataRounds_), MakeIntegerChecker<int32_t>())
       .AddAttribute("EnableUnicastFace", "Enable dynamic creating unicast faces", BooleanValue(false),
                     MakeBooleanAccessor(&NdvrApp::unicastFaces_), MakeBooleanChecker());
@@ -48,7 +48,6 @@ public:
 protected:
   virtual void StartApplication() {
     m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
-    m_instance->SetSyncDataRounds(syncDataRounds_);
     m_instance->EnableUnicastFaces(unicastFaces_);
     m_instance->Start();
   }
