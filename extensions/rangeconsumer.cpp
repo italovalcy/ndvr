@@ -83,7 +83,7 @@ void RangeConsumer::OnSyncDataNack(const ndn::Interest& interest, const ndn::lp:
 }
 
 void RangeConsumer::OnSyncDataContent(const ndn::Interest& interest, const ndn::Data& data) {
-  NS_LOG_DEBUG("Received content for SynData: " << data.getName());
+  NS_LOG_DEBUG("Received content for SynData: size=" << data.getContent().value_size() << " name=" << data.getName());
 }
 
 
