@@ -2,6 +2,7 @@
 #define UNICAST_NET_DEVICE_TRANSPORT_HPP
 
 #include "model/ndn-net-device-transport.hpp"
+#include "ns3/ndnSIM/helper/ndn-stack-helper.hpp"
 
 namespace ns3 {
 namespace ndn {
@@ -23,6 +24,10 @@ public:
     , m_neighMac(neighMac)
     //, m_netDevice(netDevice)
   {
+    netDevice->SetPromiscReceiveCallback (ns3::MakeNullCallback<bool, ns3::Ptr<ns3::NetDevice>, ns3::Ptr<const ns3::Packet>, short unsigned int, const ns3::Address&, const ns3::Address&, ns3::NetDevice::PacketType>());
+    node->RegisterProtocolHandler(MakeCallback(&UnicastNetDeviceTransport::receiveFromNetDevice, this),
+                                  L3Protocol::ETHERNET_FRAME_TYPE, netDevice,
+                                  false /*promiscuous mode*/);
   }
 
   ~UnicastNetDeviceTransport()
@@ -32,6 +37,13 @@ public:
 private:
   virtual void
   doSend(const Block& packet, const nfd::EndpointId& endpoint) override;
+
+  void
+  receiveFromNetDevice(Ptr<NetDevice> device,
+                       Ptr<const ns3::Packet> p,
+                       uint16_t protocol,
+                       const Address& from, const Address& to,
+                       NetDevice::PacketType packetType);
 
   //Ptr<NetDevice> m_netDevice; ///< \brief Smart pointer to NetDevice
   std::string m_neighMac;
