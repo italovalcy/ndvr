@@ -440,19 +440,23 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   bool newNeigh = false;
   if (neigh == m_neighMap.end()) {
     //ResetHelloInterval();
+    uint64_t neighFaceId = 0;
     if (m_enableUnicastFaces && !neigh_mac.empty()) {
       auto neighFaceId_it = m_neighToFaceId.find(neighPrefix);
       if (neighFaceId_it == m_neighToFaceId.end()) {
-        uint64_t neighFaceId = CreateUnicastFace(neigh_mac);
+        neighFaceId = CreateUnicastFace(neigh_mac);
         NS_LOG_INFO("NEW-Neighbor_FaceId == " << neighFaceId << " mac = " << neigh_mac);
         m_neighToFaceId.emplace(neighPrefix, neighFaceId);
       } else {
-        NS_LOG_INFO("EXISTING-Neighbor_FaceId == " << neighFaceId_it->second << " mac = " << neigh_mac);
+        neighFaceId = neighFaceId_it->second;
+        NS_LOG_INFO("EXISTING-Neighbor_FaceId == " << neighFaceId << " mac = " << neigh_mac);
       }
     }
-    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, inFaceId, version)).first;
+    if (neighFaceId == 0)
+      neighFaceId = inFaceId;
+    neigh = m_neighMap.emplace(neighPrefix, NeighborEntry(neighPrefix, neighFaceId, version)).first;
     uint64_t oldFaceId = 0;
-    registerNeighborPrefix(neigh->second, oldFaceId, inFaceId);
+    registerNeighborPrefix(neigh->second, oldFaceId, neighFaceId);
     newNeigh = true;
   } else {
     NS_LOG_INFO("Already known router, increasing the hello interval");
