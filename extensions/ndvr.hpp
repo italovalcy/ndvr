@@ -139,7 +139,6 @@ private:
   void SendHelloInterest();
   void registerPrefixes();
   void registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, uint64_t newFaceId);
-  void printFib();
   bool isInfinityCost(uint32_t cost);
   bool isValidCost(uint32_t cost);
   void EncodeDvInfo(std::string& out);

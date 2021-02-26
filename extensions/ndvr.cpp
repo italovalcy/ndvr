@@ -77,8 +77,6 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   });
 
   registerPrefixes();
-//  m_scheduler.schedule(ndn::time::seconds(1),
-//                        [this] { printFib(); });
 }
 
 void Ndvr::Start() {
@@ -90,20 +88,6 @@ void Ndvr::Stop() {
 
 void Ndvr::run() {
   m_face.processEvents();
-}
-
-void Ndvr::printFib() {
-  using namespace ns3;
-  using namespace ns3::ndn;
-
-  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
-  const ::nfd::Fib& fib = thisNode->GetObject<L3Protocol>()->getForwarder()->getFib();
-  NS_LOG_DEBUG("FIB Size: " << fib.size());
-  for(const ::nfd::fib::Entry& fibEntry : fib) {
-    std::string s;
-    for (const auto &nh : fibEntry.getNextHops()) s += std::to_string(nh.getFace().getId()) + ",";
-    NS_LOG_DEBUG("MyFIB: prefix=" << fibEntry.getPrefix() << " via faceIdList=" << s);
-  }
 }
 
 void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, uint64_t newFaceId) {
