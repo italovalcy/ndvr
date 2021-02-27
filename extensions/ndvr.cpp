@@ -96,13 +96,11 @@ void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, u
   NS_LOG_DEBUG("AddNeighPrefix=" << neighbor.GetName() << " oldFaceId=" << oldFaceId << " newFaceId=" << newFaceId);
 
   int32_t metric = CalculateCostToNeigh(neighbor, 0);
-  Name namePrefix = Name(neighbor.GetName());
-  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
 
   if (oldFaceId != 0) {
-    FibHelper::RemoveRoute(thisNode, namePrefix, oldFaceId);
+    m_routingTable.unregisterPrefix(neighbor.GetName(), oldFaceId);
   }
-  FibHelper::AddRoute(thisNode, namePrefix, newFaceId, metric);
+  m_routingTable.registerPrefix(neighbor.GetName(), newFaceId, metric);
 }
 
 void
@@ -322,9 +320,6 @@ Ndvr::SendDvInfoInterest(const std::string& neighbor_name, uint32_t retx) {
     std::bind(&Ndvr::OnDvInfoContent, this, _1, _2),
     std::bind(&Ndvr::OnDvInfoNack, this, _1, _2),
     std::bind(&Ndvr::OnDvInfoTimedOut, this, _1, retx));
-
-  // Not necessary anymore, since the DvInfo is sent on demand (when receiving an ehlo)
-  //ns3::Simulator::Schedule(ns3::Seconds(m_localRTInterval), &Ndvr::SendDvInfoInterest, this, neighbor);
 }
 
 uint64_t Ndvr::ExtractIncomingFace(const ndn::Interest& interest) {

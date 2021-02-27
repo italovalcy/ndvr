@@ -120,6 +120,8 @@ public:
   bool LookupRoute(std::string n, RoutingEntry& e);
   void insert(RoutingEntry& e);
   void UpdateDigest();
+  void unregisterPrefix(std::string name, uint64_t faceId);
+  void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
 
   uint32_t GetVersion() {
     return m_version;
@@ -139,9 +141,6 @@ public:
   decltype(m_rt.begin()) begin() { return m_rt.begin(); }
   decltype(m_rt.end()) end() { return m_rt.end(); }
   decltype(m_rt.size()) size() { return m_rt.size(); }
-private:
-  void unregisterPrefix(std::string name, uint64_t faceId);
-  void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
 
 private:
   uint32_t m_version;
