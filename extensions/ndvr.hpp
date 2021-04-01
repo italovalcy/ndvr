@@ -121,6 +121,18 @@ public:
     m_enableUnicastFaces = flag;
   }
 
+  void EnableDSK(bool flag) {
+    m_enableDSK = flag;
+  }
+
+  void SetMaxDaysDSK(uint32_t x) {
+    m_maxDaysDSK = x;
+  }
+
+  void SetMaxSizeDSK(uint32_t x) {
+    m_maxSizeDSK = x;
+  }
+
 private:
   typedef std::map<std::string, NeighborEntry> NeighborMap;
 
@@ -154,6 +166,8 @@ private:
   uint64_t CreateUnicastFace(std::string mac);
   std::string GetNeighborToken();
   void UpdateRoutingTableDigest();
+  void ManageSigningInfo();
+  const ndn::security::SigningInfo& getSigningInfo();
 
   void
   buildRouterPrefix()
@@ -226,12 +240,6 @@ private:
     return name.get(kNdvrHelloPrefix.size()+3+2).toNumber();
   }
 
-  const ndn::security::SigningInfo&
-  getSigningInfo() const
-  {
-    return m_signingInfo;
-  }
-
 private:
   const ndn::security::SigningInfo& m_signingInfo;
   ndn::Scheduler m_scheduler;
@@ -267,10 +275,16 @@ private:
   uint32_t m_c = 4;
   /* For DvInfo interest suppression */
   std::unordered_map<std::string, scheduler::EventId> dvinfointerest_event;
+  /* Signing Key separation into long term and short term keys (i.e.,
+   * KSK - Key signing key and DSK - Data signing key) */
+  bool m_enableDSK = false;
+  uint32_t m_maxDaysDSK = 0;
+  uint32_t m_maxSizeDSK = 0;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
   scheduler::EventId replydvinfo_event;  /* group dvinfo replies to avoid duplicate */
+  scheduler::EventId managesigninginfo_event;  /* manage signing info (check and update if needed) */
   std::random_device rdevice_;
   std::mt19937 m_rengine;
   std::uniform_int_distribution<> replydvinfo_dist = std::uniform_int_distribution<>(100, 150);   /* milliseconds */

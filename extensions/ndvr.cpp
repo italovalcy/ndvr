@@ -133,6 +133,22 @@ Ndvr::registerPrefixes() {
 
 }
 
+const ndn::security::SigningInfo&
+Ndvr::getSigningInfo()
+{
+  // TODO: instead of using the m_signingInfo directly, we need to check if we are suppose to use DSK or KSK
+  if (m_enableDSK) {
+    // TODO: change to the correct dsk signingInfo
+    return m_signingInfo;
+  }
+  return m_signingInfo;
+}
+
+void
+Ndvr::ManageSigningInfo() {
+  // TODO: check if we need a new DSK certificated based on its validity period or amount of signed data
+}
+
 std::string
 Ndvr::GetNeighborToken() {
   std::string res;
@@ -485,6 +501,10 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
 }
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
+  if (!managesigninginfo_event) {
+    managesigninginfo_event = m_scheduler.schedule(time::milliseconds(100), [this] { ManageSigningInfo(); });
+  }
+
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
@@ -494,7 +514,7 @@ void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
   // Sign and send
-  m_keyChain.sign(*data, m_signingInfo);
+  m_keyChain.sign(*data, getSigningInfo());
   m_face.put(*data);
 }
 
