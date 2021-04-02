@@ -139,14 +139,62 @@ Ndvr::getSigningInfo()
   // TODO: instead of using the m_signingInfo directly, we need to check if we are suppose to use DSK or KSK
   if (m_enableDSK) {
     // TODO: change to the correct dsk signingInfo
-    return m_signingInfo;
+    return m_signingInfoDSK;
   }
   return m_signingInfo;
 }
 
 void
 Ndvr::ManageSigningInfo() {
+  /* Sanity check */
+  if (!m_enableDSK)
+    return;
+  // TODO: check if at least of data amount or time window have valid values
+
   // TODO: check if we need a new DSK certificated based on its validity period or amount of signed data
+  if (m_signingInfoDSK.getSignerType() == ndn::security::SigningInfo::SIGNER_TYPE_NULL) {
+    createDSK(m_routerPrefix.toUri());
+    return;
+  }
+
+  /*if (update key based on time slot - and - timeslot is expired) then
+   *   createDKS()
+   *else (update key based on signed data amount - and - already signed enought data with this key) then
+   *   createDSK()
+   *   reset counter for amount of data
+   */
+
+}
+
+void
+Ndvr::createDSK(std::string subjectName) {
+  ndn::security::Identity subjectId = m_keyChain.createIdentity(subjectName);
+  ndn::security::v2::Certificate certReq = subjectId.getDefaultKey().getDefaultCertificate();
+  ndn::security::v2::Certificate cert;
+
+  ndn::Name certificateName = certReq.getKeyName();
+  certificateName.append("dsk");
+  certificateName.appendVersion();
+  cert.setName(certificateName);
+  cert.setContent(certReq.getContent());
+
+  // 2. Sign the certificate using issuer key (ksk)
+  ndn::SignatureInfo signInfoParams;
+  // TODO ? which time window should we use?
+  signInfoParams.setValidityPeriod(ndn::security::ValidityPeriod(ndn::time::system_clock::TimePoint(),
+                                                                ndn::time::system_clock::now() + ndn::time::days(365)));
+
+  // TODO: this is returing an error:
+  // - error: passing ‘const ndn::security::SigningInfo’ as ‘this’ argument discards qualifiers [-fpermissive]
+  m_keyChain.sign(cert, ndn::security::SigningInfo(m_signingInfo).setSignatureInfo(signInfoParams));
+
+  // 3. Install the signed certificate
+  auto id = m_keyChain.getPib().getIdentity(cert.getIdentity());
+  auto keyCert = id.getKey(cert.getKeyName());
+  m_keyChain.addCertificate(keyCert, cert);
+  m_keyChain.setDefaultCertificate(keyCert, cert);
+
+  m_signingInfoDSK = ndn::security::SigningInfo(ndn::security::SigningInfo::SIGNER_TYPE_ID, subjectName);
 }
 
 std::string
@@ -501,8 +549,8 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
 }
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
-  if (!managesigninginfo_event) {
-    managesigninginfo_event = m_scheduler.schedule(time::milliseconds(100), [this] { ManageSigningInfo(); });
+  if (m_enableDSK && !managesigninginfo_event) {
+    managesigninginfo_event = m_scheduler.schedule(time::milliseconds(1000), [this] { ManageSigningInfo(); });
   }
 
   auto data = std::make_shared<ndn::Data>(interest.getName());

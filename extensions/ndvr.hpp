@@ -167,6 +167,7 @@ private:
   std::string GetNeighborToken();
   void UpdateRoutingTableDigest();
   void ManageSigningInfo();
+  void createDSK(std::string subjectName);
   const ndn::security::SigningInfo& getSigningInfo();
 
   void
@@ -280,6 +281,7 @@ private:
   bool m_enableDSK = false;
   uint32_t m_maxDaysDSK = 0;
   uint32_t m_maxSizeDSK = 0;
+  const ndn::security::SigningInfo& m_signingInfoDSK = ndn::security::SigningInfo();
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
