@@ -81,6 +81,7 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
 
 void Ndvr::Start() {
   SendHelloInterest();
+  ManageSigningInfo();
 }
 
 void Ndvr::Stop() {
@@ -136,34 +137,34 @@ Ndvr::registerPrefixes() {
 const ndn::security::SigningInfo&
 Ndvr::getSigningInfo()
 {
-  // TODO: instead of using the m_signingInfo directly, we need to check if we are suppose to use DSK or KSK
-  if (m_enableDSK) {
-    // TODO: change to the correct dsk signingInfo
-    return m_signingInfoDSK;
-  }
-  return m_signingInfo;
+  return (m_enableDSK) ? m_signingInfoDSK : m_signingInfo;
 }
 
 void
 Ndvr::ManageSigningInfo() {
+  managesigninginfo_event.cancel();
+
   /* Sanity check */
   if (!m_enableDSK)
     return;
-  // TODO: check if at least of data amount or time window have valid values
-
-  // TODO: check if we need a new DSK certificated based on its validity period or amount of signed data
-  if (m_signingInfoDSK.getSignerType() == ndn::security::SigningInfo::SIGNER_TYPE_NULL) {
-    createDSK(m_routerPrefix.toUri());
+  if (m_maxDaysDSK==0 && m_maxSizeDSK==0)
     return;
+
+  /* Whenever needed, create a new DSK certificate based on its validity 
+   * period or amount of signed data */
+  if (m_signingInfoDSK.getSignerType() == ndn::security::SigningInfo::SIGNER_TYPE_NULL) {
+    NS_LOG_DEBUG("createDSK due to bootstrap process");
+    createDSK(m_routerPrefix.toUri());
+  } else if (m_maxDaysDSK!=0 && getDaysSinceLastDSKCert() >= time::seconds(m_maxDaysDSK)) {
+  //} else if (m_maxDaysDSK!=0 && getDaysSinceLastDSKCert() >= time::days(m_maxDaysDSK)) {
+    NS_LOG_DEBUG("createDSK due to maxDays exceeded daysSinceLastDSK=" << getDaysSinceLastDSKCert() << " maxDays=" << m_maxDaysDSK);
+    createDSK(m_routerPrefix.toUri());
+  } else if (m_maxSizeDSK!=0 && m_signedDataAmountDSK >= m_maxSizeDSK) {
+    NS_LOG_DEBUG("createDSK due to amountSignedData exceeded signedDataAmount=" << m_signedDataAmountDSK << " maxSize=" << m_maxSizeDSK);
+    createDSK(m_routerPrefix.toUri());
   }
 
-  /*if (update key based on time slot - and - timeslot is expired) then
-   *   createDKS()
-   *else (update key based on signed data amount - and - already signed enought data with this key) then
-   *   createDSK()
-   *   reset counter for amount of data
-   */
-
+  managesigninginfo_event = m_scheduler.schedule(time::seconds(60), [this] { ManageSigningInfo(); });
 }
 
 void
@@ -194,7 +195,10 @@ Ndvr::createDSK(std::string subjectName) {
   m_keyChain.addCertificate(keyCert, cert);
   m_keyChain.setDefaultCertificate(keyCert, cert);
 
+  NS_LOG_DEBUG("New-DSK identity=" << id.getName() << " cert=" << cert.getName() << " key=" << cert.getKeyName());
   m_signingInfoDSK = ndn::security::SigningInfo(ndn::security::SigningInfo::SIGNER_TYPE_ID, subjectName);
+  m_signedDataAmountDSK = 0;
+  m_lastDSKCert = time::steady_clock::now();
 }
 
 std::string
@@ -549,10 +553,6 @@ void Ndvr::OnDvInfoInterest(const ndn::Interest& interest) {
 }
 
 void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
-  if (m_enableDSK && !managesigninginfo_event) {
-    managesigninginfo_event = m_scheduler.schedule(time::milliseconds(1000), [this] { ManageSigningInfo(); });
-  }
-
   auto data = std::make_shared<ndn::Data>(interest.getName());
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
@@ -561,6 +561,7 @@ void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size() << " I=" << interest.getName());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
   data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
+  m_signedDataAmountDSK += dvinfo_str.size();
   // Sign and send
   m_keyChain.sign(*data, getSigningInfo());
   m_face.put(*data);

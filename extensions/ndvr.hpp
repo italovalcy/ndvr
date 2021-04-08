@@ -241,6 +241,12 @@ private:
     return name.get(kNdvrHelloPrefix.size()+3+2).toNumber();
   }
 
+  //time::days getDaysSinceLastDSKCert() {
+  //  return time::duration_cast<time::days>(time::steady_clock::now() - m_lastDSKCert);
+  time::seconds getDaysSinceLastDSKCert() {
+    return time::duration_cast<time::seconds>(time::steady_clock::now() - m_lastDSKCert);
+  }
+
 private:
   const ndn::security::SigningInfo& m_signingInfo;
   ndn::Scheduler m_scheduler;
@@ -281,7 +287,9 @@ private:
   bool m_enableDSK = false;
   uint32_t m_maxDaysDSK = 0;
   uint32_t m_maxSizeDSK = 0;
-  const ndn::security::SigningInfo& m_signingInfoDSK = ndn::security::SigningInfo();
+  ndn::security::SigningInfo m_signingInfoDSK = ndn::security::SigningInfo();
+  time::steady_clock::TimePoint m_lastDSKCert = time::steady_clock::TimePoint::max();
+  uint64_t m_signedDataAmountDSK = 0;
 
   scheduler::EventId sendhello_event;  /* async send hello event scheduler */
   scheduler::EventId increasehellointerval_event;  /* increase hello interval event scheduler */
