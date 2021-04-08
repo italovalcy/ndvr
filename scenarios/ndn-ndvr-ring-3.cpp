@@ -66,7 +66,7 @@ main(int argc, char* argv[])
     app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
-    app->EnableDSKMaxDays(60);
+    app->EnableDSKMaxSecs(60);
   }
 
   Simulator::Stop(Seconds(duration));

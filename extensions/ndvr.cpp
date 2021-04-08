@@ -147,17 +147,18 @@ Ndvr::ManageSigningInfo() {
   /* Sanity check */
   if (!m_enableDSK)
     return;
-  if (m_maxDaysDSK==0 && m_maxSizeDSK==0)
+  if (m_maxSecsDSK==0 && m_maxSizeDSK==0) {
+    m_enableDSK = false;
     return;
+  }
 
   /* Whenever needed, create a new DSK certificate based on its validity 
    * period or amount of signed data */
   if (m_signingInfoDSK.getSignerType() == ndn::security::SigningInfo::SIGNER_TYPE_NULL) {
     NS_LOG_DEBUG("createDSK due to bootstrap process");
     createDSK(m_routerPrefix.toUri());
-  } else if (m_maxDaysDSK!=0 && getDaysSinceLastDSKCert() >= time::seconds(m_maxDaysDSK)) {
-  //} else if (m_maxDaysDSK!=0 && getDaysSinceLastDSKCert() >= time::days(m_maxDaysDSK)) {
-    NS_LOG_DEBUG("createDSK due to maxDays exceeded daysSinceLastDSK=" << getDaysSinceLastDSKCert() << " maxDays=" << m_maxDaysDSK);
+  } else if (m_maxSecsDSK!=0 && getSecsSinceLastDSKCert() >= time::seconds(m_maxSecsDSK)) {
+    NS_LOG_DEBUG("createDSK due to maxSecs exceeded secsSinceLastDSK=" << getSecsSinceLastDSKCert() << " maxSecs=" << m_maxSecsDSK);
     createDSK(m_routerPrefix.toUri());
   } else if (m_maxSizeDSK!=0 && m_signedDataAmountDSK >= m_maxSizeDSK) {
     NS_LOG_DEBUG("createDSK due to amountSignedData exceeded signedDataAmount=" << m_signedDataAmountDSK << " maxSize=" << m_maxSizeDSK);

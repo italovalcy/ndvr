@@ -45,8 +45,8 @@ public:
     signingInfo_ = signingInfo;
   }
 
-  void EnableDSKMaxDays(uint32_t x) {
-    maxDaysDSK_ = x;
+  void EnableDSKMaxSecs(uint32_t x) {
+    maxSecsDSK_ = x;
   }
   void EnableDSKMaxSize(uint32_t x) {
     maxSizeDSK_ = x;
@@ -58,10 +58,10 @@ protected:
     m_instance->EnableUnicastFaces(unicastFaces_);
     m_instance->Start();
 
-    if (maxDaysDSK_!=0 || maxSizeDSK_!=0) {
+    if (maxSecsDSK_!=0 || maxSizeDSK_!=0) {
       m_instance->EnableDSK(true);
-      m_instance->SetMaxSizeDSK(maxDaysDSK_);
-      m_instance->SetMaxDaysDSK(maxSizeDSK_);
+      m_instance->SetMaxSizeDSK(maxSizeDSK_);
+      m_instance->SetMaxSecsDSK(maxSecsDSK_);
     }
   }
 
@@ -78,7 +78,7 @@ private:
   std::vector<std::string> namePrefixes_;
   uint32_t syncDataRounds_;      // number of rounds to sync data (for data sync experiment)
   bool unicastFaces_;
-  uint32_t maxDaysDSK_ = 0;
+  uint32_t maxSecsDSK_ = 0;
   uint32_t maxSizeDSK_ = 0;
 };
 

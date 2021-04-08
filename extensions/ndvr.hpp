@@ -125,8 +125,8 @@ public:
     m_enableDSK = flag;
   }
 
-  void SetMaxDaysDSK(uint32_t x) {
-    m_maxDaysDSK = x;
+  void SetMaxSecsDSK(uint32_t x) {
+    m_maxSecsDSK = x;
   }
 
   void SetMaxSizeDSK(uint32_t x) {
@@ -241,9 +241,7 @@ private:
     return name.get(kNdvrHelloPrefix.size()+3+2).toNumber();
   }
 
-  //time::days getDaysSinceLastDSKCert() {
-  //  return time::duration_cast<time::days>(time::steady_clock::now() - m_lastDSKCert);
-  time::seconds getDaysSinceLastDSKCert() {
+  time::seconds getSecsSinceLastDSKCert() {
     return time::duration_cast<time::seconds>(time::steady_clock::now() - m_lastDSKCert);
   }
 
@@ -285,7 +283,7 @@ private:
   /* Signing Key separation into long term and short term keys (i.e.,
    * KSK - Key signing key and DSK - Data signing key) */
   bool m_enableDSK = false;
-  uint32_t m_maxDaysDSK = 0;
+  uint32_t m_maxSecsDSK = 0;
   uint32_t m_maxSizeDSK = 0;
   ndn::security::SigningInfo m_signingInfoDSK = ndn::security::SigningInfo();
   time::steady_clock::TimePoint m_lastDSKCert = time::steady_clock::TimePoint::max();
