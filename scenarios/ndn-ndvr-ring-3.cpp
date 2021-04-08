@@ -16,7 +16,10 @@ NS_OBJECT_ENSURE_REGISTERED(NdvrApp);
 int
 main(int argc, char* argv[])
 {
+  uint32_t duration = 200;
+
   CommandLine cmd;
+  cmd.AddValue ("duration", "duration (s)", duration);
   cmd.Parse(argc, argv);
 
   NodeContainer nodes;
@@ -63,9 +66,10 @@ main(int argc, char* argv[])
     app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
+    app->EnableDSKMaxDays(60);
   }
 
-  Simulator::Stop(Seconds(128.0));
+  Simulator::Stop(Seconds(duration));
 
   Simulator::Run();
   Simulator::Destroy();
