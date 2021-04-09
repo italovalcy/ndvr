@@ -56,13 +56,12 @@ protected:
   virtual void StartApplication() {
     m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
     m_instance->EnableUnicastFaces(unicastFaces_);
-    m_instance->Start();
-
     if (maxSecsDSK_!=0 || maxSizeDSK_!=0) {
       m_instance->EnableDSK(true);
       m_instance->SetMaxSizeDSK(maxSizeDSK_);
       m_instance->SetMaxSecsDSK(maxSecsDSK_);
     }
+    m_instance->Start();
   }
 
   virtual void StopApplication() {
