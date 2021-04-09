@@ -572,7 +572,7 @@ void Ndvr::OnKeyInterest(const ndn::Interest& interest) {
 
   try {
     // Create Data packet
-    ndn::security::v2::Certificate cert = m_keyChain.getPib().getIdentity(identityName).getDefaultKey().getDefaultCertificate();
+    auto cert = m_keyChain.getPib().getIdentity(identityName).getKey(interest.getName()).getDefaultCertificate();
 
     // Return Data packet to the requester
     m_face.put(cert);
