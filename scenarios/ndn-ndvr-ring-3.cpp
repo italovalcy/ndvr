@@ -17,9 +17,11 @@ int
 main(int argc, char* argv[])
 {
   uint32_t duration = 200;
+  bool enableDSK = false;
 
   CommandLine cmd;
   cmd.AddValue ("duration", "duration (s)", duration);
+  cmd.AddValue ("enableDSK", "enable DSK", enableDSK);
   cmd.Parse(argc, argv);
 
   NodeContainer nodes;
@@ -66,7 +68,9 @@ main(int argc, char* argv[])
     app->AddNamePrefix("/ndn/site-"+std::to_string(idx));
     app->AddNamePrefix("/ndn/xpto-"+std::to_string(idx));
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
-    app->EnableDSKMaxSecs(60);
+    if (enableDSK) {
+      app->EnableDSKMaxSecs(60);
+    }
   }
 
   Simulator::Stop(Seconds(duration));
