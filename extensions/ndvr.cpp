@@ -157,11 +157,11 @@ Ndvr::ManageSigningInfo() {
   if (m_signingInfoDSK.getSignerType() == ndn::security::SigningInfo::SIGNER_TYPE_NULL) {
     NS_LOG_DEBUG("createDSK due to bootstrap process");
     createDSK(m_routerPrefix.toUri());
-  } else if (m_maxSecsDSK!=0 && getSecsSinceLastDSKCert() >= time::seconds(m_maxSecsDSK)) {
-    NS_LOG_DEBUG("createDSK due to maxSecs exceeded secsSinceLastDSK=" << getSecsSinceLastDSKCert() << " maxSecs=" << m_maxSecsDSK);
-    createDSK(m_routerPrefix.toUri());
   } else if (m_maxSizeDSK!=0 && m_signedDataAmountDSK >= m_maxSizeDSK) {
     NS_LOG_DEBUG("createDSK due to amountSignedData exceeded signedDataAmount=" << m_signedDataAmountDSK << " maxSize=" << m_maxSizeDSK);
+    createDSK(m_routerPrefix.toUri());
+  } else if (m_maxSecsDSK!=0 && getSecsSinceLastDSKCert() >= time::seconds(m_maxSecsDSK)) {
+    NS_LOG_DEBUG("createDSK due to maxSecs exceeded secsSinceLastDSK=" << getSecsSinceLastDSKCert() << " maxSecs=" << m_maxSecsDSK);
     createDSK(m_routerPrefix.toUri());
   }
 
@@ -170,34 +170,30 @@ Ndvr::ManageSigningInfo() {
 
 void
 Ndvr::createDSK(std::string subjectName) {
-  ndn::security::Identity subjectId = m_keyChain.createIdentity(subjectName);
-  ndn::security::v2::Certificate certReq = subjectId.getDefaultKey().getDefaultCertificate();
-  ndn::security::v2::Certificate cert;
+  ndn::security::Key dsk = m_keyChain.createKey(m_keyChain.getPib().getIdentity(m_signingInfo.getSignerName()));
 
-  ndn::Name certificateName = certReq.getKeyName();
-  certificateName.append("dsk");
+  ndn::Name certificateName = dsk.getName();
+  certificateName.append("DSK");
   certificateName.appendVersion();
-  cert.setName(certificateName);
-  cert.setContent(certReq.getContent());
 
-  // 2. Sign the certificate using issuer key (ksk)
+  ndn::security::v2::Certificate cert;
+  cert.setName(certificateName);
+  cert.setContentType(ndn::tlv::ContentType_Key);
+  cert.setFreshnessPeriod(time::hours(1));
+  cert.setContent(dsk.getPublicKey().data(), dsk.getPublicKey().size());
+
   ndn::SignatureInfo signInfoParams;
-  // TODO ? which time window should we use?
-  signInfoParams.setValidityPeriod(ndn::security::ValidityPeriod(ndn::time::system_clock::TimePoint(),
+  signInfoParams.setValidityPeriod(ndn::security::ValidityPeriod(ndn::time::system_clock::now() - time::seconds(1),
                                                                 ndn::time::system_clock::now() + ndn::time::days(365)));
 
-  // TODO: this is returing an error:
-  // - error: passing ‘const ndn::security::SigningInfo’ as ‘this’ argument discards qualifiers [-fpermissive]
   m_keyChain.sign(cert, ndn::security::SigningInfo(m_signingInfo).setSignatureInfo(signInfoParams));
 
-  // 3. Install the signed certificate
   auto id = m_keyChain.getPib().getIdentity(cert.getIdentity());
-  auto keyCert = id.getKey(cert.getKeyName());
-  m_keyChain.addCertificate(keyCert, cert);
-  m_keyChain.setDefaultCertificate(keyCert, cert);
+  m_keyChain.addCertificate(dsk, cert);
+  m_keyChain.setDefaultCertificate(dsk, cert);
 
-  NS_LOG_DEBUG("New-DSK identity=" << id.getName() << " cert=" << cert.getName() << " key=" << cert.getKeyName());
-  m_signingInfoDSK = ndn::security::SigningInfo(ndn::security::SigningInfo::SIGNER_TYPE_ID, subjectName);
+  NS_LOG_DEBUG("New-DSK id=" << id.getName() << " cert=" << cert.getName() << " key=" << dsk.getName() << " signingKSK=" << m_signingInfo.getSignerName());
+  m_signingInfoDSK = ndn::security::signingByCertificate(cert);
   m_signedDataAmountDSK = 0;
   m_lastDSKCert = time::steady_clock::now();
 }
