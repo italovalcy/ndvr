@@ -18,10 +18,12 @@ main(int argc, char* argv[])
 {
   uint32_t duration = 200;
   bool enableDSK = false;
+  bool enablePcap = false;
 
   CommandLine cmd;
   cmd.AddValue ("duration", "duration (s)", duration);
   cmd.AddValue ("enableDSK", "enable DSK", enableDSK);
+  cmd.AddValue ("enablePcap", "enable Pcap", enablePcap);
   cmd.Parse(argc, argv);
 
   NodeContainer nodes;
@@ -41,6 +43,9 @@ main(int argc, char* argv[])
   // 3. Install NDN stack
   ndn::StackHelper ndnHelper;
   ndnHelper.Install(nodes);
+  if (enablePcap) {
+    p2p.EnablePcapAll ("capture-p2p");
+  }
 
   // 4. Set Forwarding Strategy
   ndn::StrategyChoiceHelper::Install(nodes, "/", "/localhost/nfd/strategy/multicast");
