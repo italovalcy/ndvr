@@ -140,6 +140,18 @@ Ndvr::getSigningInfo()
   return (m_enableDSK) ? m_signingInfoDSK : m_signingInfo;
 }
 
+const ndn::KeyParams&
+Ndvr::getKeyType()
+{
+  if (m_keyType == "e") {
+    static EcKeyParams keyParams;
+    return keyParams;
+  } else if (m_keyType == "r") {
+    static RsaKeyParams keyParams;
+    return keyParams;
+  }
+}
+
 void
 Ndvr::ManageSigningInfo() {
   managesigninginfo_event.cancel();
@@ -170,7 +182,7 @@ Ndvr::ManageSigningInfo() {
 
 void
 Ndvr::createDSK(std::string subjectName) {
-  ndn::security::Key dsk = m_keyChain.createKey(m_keyChain.getPib().getIdentity(m_signingInfo.getSignerName()));
+  ndn::security::Key dsk = m_keyChain.createKey(m_keyChain.getPib().getIdentity(m_signingInfo.getSignerName()), getKeyType());
 
   ndn::Name certificateName = dsk.getName();
   certificateName.append("DSK");

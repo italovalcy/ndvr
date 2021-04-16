@@ -121,6 +121,10 @@ public:
     m_enableUnicastFaces = flag;
   }
 
+  void SetKeyType(std::string t) {
+    m_keyType = t;
+  }
+
   void EnableDSK(bool flag) {
     m_enableDSK = flag;
   }
@@ -169,6 +173,7 @@ private:
   void ManageSigningInfo();
   void createDSK(std::string subjectName);
   const ndn::security::SigningInfo& getSigningInfo();
+  const ndn::KeyParams& getKeyType();
 
   void
   buildRouterPrefix()
@@ -280,6 +285,8 @@ private:
   uint32_t m_c = 4;
   /* For DvInfo interest suppression */
   std::unordered_map<std::string, scheduler::EventId> dvinfointerest_event;
+  /* Configure the key type in key generation */
+  std::string m_keyType = "e";
   /* Signing Key separation into long term and short term keys (i.e.,
    * KSK - Key signing key and DSK - Data signing key) */
   bool m_enableDSK = false;

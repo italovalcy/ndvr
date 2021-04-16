@@ -19,11 +19,13 @@ main(int argc, char* argv[])
   uint32_t duration = 200;
   bool enableDSK = false;
   bool enablePcap = false;
+  std::string keyType = "e"; // default EDCSA
 
   CommandLine cmd;
   cmd.AddValue ("duration", "duration (s)", duration);
   cmd.AddValue ("enableDSK", "enable DSK", enableDSK);
   cmd.AddValue ("enablePcap", "enable Pcap", enablePcap);
+  cmd.AddValue ("keyType", "key type", keyType);
   cmd.Parse(argc, argv);
 
   NodeContainer nodes;
@@ -76,6 +78,8 @@ main(int argc, char* argv[])
     if (enableDSK) {
       app->EnableDSKMaxSecs(60);
     }
+
+    app->SetKeyType(keyType);
   }
 
   Simulator::Stop(Seconds(duration));
