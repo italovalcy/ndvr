@@ -637,7 +637,7 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
 
   /* Security validation */
   if (data.getSignature().hasKeyLocator()) {
-    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName() << " type=" << data.getSignature().getType());
   }
 
 
