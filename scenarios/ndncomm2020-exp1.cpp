@@ -155,6 +155,8 @@ main(int argc, char* argv[])
   for (NodeContainer::Iterator i = nodes.Begin(); i != nodes.End(); ++i, idx++) {
     Ptr<Node> node = *i;    /* This is NS3::Node, not ndn::Node */
     std::string routerName = "/\%C1.Router/Router"+std::to_string(idx);
+    ndn::Name namePrefix("/ndn/ndvrSync");
+    namePrefix.appendNumber(idx);
 
     // change the unsolicited data policy to save in cache localhop messages
     setUnsolicitedDataPolicy(node);
@@ -162,15 +164,14 @@ main(int argc, char* argv[])
     ndn::AppHelper appHelper("NdvrApp");
     appHelper.SetAttribute("Network", StringValue("/ndn"));
     appHelper.SetAttribute("RouterName", StringValue(routerName));
-    appHelper.SetAttribute("SyncDataRounds", IntegerValue(syncDataRounds));
+    //appHelper.SetAttribute("SyncDataRounds", IntegerValue(syncDataRounds));
     appHelper.Install(node).Start(MilliSeconds(10*idx));
 
     auto app = DynamicCast<NdvrApp>(node->GetApplication(0));
     app->AddSigningInfo(::ndn::ndvr::setupSigningInfo(ndn::Name(network + routerName), ndn::Name(network)));
+    app->AddNamePrefix(namePrefix.toUri());
 
     // Producer
-    ndn::Name namePrefix("/ndn/ndvrSync");
-    namePrefix.appendNumber(idx);
     ndn::AppHelper producerHelper("ns3::ndn::Producer");
     producerHelper.SetPrefix(namePrefix.toUri());
     producerHelper.SetAttribute("PayloadSize", StringValue("300"));
