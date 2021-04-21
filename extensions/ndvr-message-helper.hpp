@@ -29,7 +29,7 @@ inline RoutingTable DecodeDvInfo(const proto::DvInfo& dvinfo_proto) {
     auto seq = entry.seq();
     auto cost = entry.cost();
     RoutingEntry re = RoutingEntry(prefix, seq, cost);
-    dvinfo.insert(re);
+    dvinfo.emplace(prefix, re);
   }
   return dvinfo;
 }

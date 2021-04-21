@@ -6,31 +6,55 @@
 #include <boost/algorithm/string.hpp> 
 #include <algorithm>
 #include <boost/uuid/sha1.hpp>
-#include <ns3/simulator.h>
-#include <ns3/log.h>
-#include <ns3/ptr.h>
-#include <ns3/node.h>
-#include <ns3/node-list.h>
-#include <ns3/ndnSIM/helper/ndn-stack-helper.hpp>
+//#include <ns3/simulator.h>
+//#include <ns3/log.h>
+//#include <ns3/ptr.h>
+//#include <ns3/node.h>
+//#include <ns3/node-list.h>
+//#include <ns3/ndnSIM/helper/ndn-stack-helper.hpp>
 #include <ndn-cxx/lp/tags.hpp>
 
-#include "ns3/ndnSIM/model/ndn-l3-protocol.hpp"
-#include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
-#include "unicast-net-device-transport.hpp"
+//#include "ns3/ndnSIM/model/ndn-l3-protocol.hpp"
+//#include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
+//#include "unicast-net-device-transport.hpp"
 
+#ifdef NS_LOG
 NS_LOG_COMPONENT_DEFINE("ndn.Ndvr");
+#endif
+#ifndef NS_LOG
+#include <chrono>
+#include <ctime>
+ 
+char curtime[30];
+void update_curtime() {
+	std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    	std::strftime(curtime, sizeof(curtime), "%Y-%m-%d,%H:%M:%S", std::gmtime(&now));
+}
+
+#define NS_LOG(level, msg)                                      \
+          update_curtime();                                     \
+          std::cout << curtime << " [" << level << "] " << __func__ << "() " << msg << std::endl;
+#define NS_LOG_DEBUG(msg) \
+  NS_LOG ("DEBUG", msg)
+#define NS_LOG_INFO(msg) \
+  NS_LOG ("INFO", msg)
+
+#endif
 
 namespace ndn {
 namespace ndvr {
 
-Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv)
+Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv, std::vector<std::string>& faces, std::string validationConfig)
   : m_signingInfo(signingInfo)
   , m_scheduler(m_face.getIoService())
   , m_validator(m_face)
   , m_seq(0)
-  , m_rand(ns3::CreateObject<ns3::UniformRandomVariable>())
+  , m_rand_nonce(0, std::numeric_limits<int>::max())
+  , m_rand_backoff(1, 19999)
   , m_network(network)
   , m_routerName(routerName)
+  , m_listenFaces(faces)
+  , m_routingTable(m_face, m_keyChain)
   , m_helloIntervalIni(1)
   , m_helloIntervalCur(1)
   , m_helloIntervalMax(5)
@@ -42,23 +66,27 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
 {
   buildRouterPrefix();
 
-  // TODO: this should be a conf parameter
-  std::string fileName = "config/validation.conf";
   try {
-    m_validator.load(fileName);
+    m_validator.load(validationConfig);
   }
   catch (const std::exception &e ) {
-    throw Error("Failed to load validation rules file=" + fileName + " Error=" + e.what());
+    throw Error("Failed to load validation rules file=" + validationConfig + " Error=" + e.what());
   }
 
   for (std::vector<std::string>::iterator it = npv.begin() ; it != npv.end(); ++it) {
     RoutingEntry routingEntry;
     routingEntry.SetName(*it);
-    routingEntry.SetSeqNum(1);
+    routingEntry.SetSeqNum(2);
     routingEntry.SetCost(0);
     routingEntry.SetFaceId(0); /* directly connected */
     m_routingTable.insert(routingEntry);
   }
+
+  m_routingTable.enableLocalFields();
+  m_routingTable.setMulticastStrategy(kNdvrPrefix.toUri());
+}
+
+void Ndvr::Start() {
   m_face.setInterestFilter(kNdvrHelloPrefix, std::bind(&Ndvr::processInterest, this, _2),
     [this](const Name&, const std::string& reason) {
       throw Error("Failed to register sync interest prefix: " + reason);
@@ -77,9 +105,7 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   });
 
   registerPrefixes();
-}
 
-void Ndvr::Start() {
   SendHelloInterest();
 }
 
@@ -90,9 +116,14 @@ void Ndvr::run() {
   m_face.processEvents();
 }
 
+void Ndvr::cleanup() {
+  // TODO: remove faces
+  // TODO: remove entries from Fib
+}
+
 void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, uint64_t newFaceId) {
-  using namespace ns3;
-  using namespace ns3::ndn;
+  //using namespace ns3;
+  //using namespace ns3::ndn;
   NS_LOG_DEBUG("AddNeighPrefix=" << neighbor.GetName() << " oldFaceId=" << oldFaceId << " newFaceId=" << newFaceId);
 
   int32_t metric = CalculateCostToNeigh(neighbor, 0);
@@ -105,32 +136,54 @@ void Ndvr::registerNeighborPrefix(NeighborEntry& neighbor, uint64_t oldFaceId, u
 
 void
 Ndvr::registerPrefixes() {
-  using namespace ns3;
-  using namespace ns3::ndn;
+  for(std::string face : m_listenFaces) {
+    uint64_t faceId;
+    //std::size_t pos = faceUri.find_first_of("?");
+    //std::vector<std::string> faceProperties;
+    //if (pos!=std::string::npos) {
+    //  boost::split(faceProperties, faceUri.substr(pos+1), boost::is_any_of("&"));
+    //  faceUri[pos] = '\0';
+    //}
 
-  int32_t metric = 0; // should it be 0 or std::numeric_limits<int32_t>::max() ??
-  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
-  NS_LOG_DEBUG("THIS node is: " << thisNode->GetId());
+    if (face.find_first_not_of( "0123456789" ) == std::string::npos)
+      faceId = std::stoi(face);
+    else
+      faceId = m_routingTable.createFace(face);
 
-  for (uint32_t deviceId = 0; deviceId < thisNode->GetNDevices(); deviceId++) {
-    Ptr<NetDevice> device = thisNode->GetDevice(deviceId);
-    Ptr<L3Protocol> ndn = thisNode->GetObject<L3Protocol>();
-    NS_ASSERT_MSG(ndn != nullptr, "Ndn stack should be installed on the node");
-
-    auto face = ndn->getFaceByNetDevice(device);
-    NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
-
-    NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
-    FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
-    FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
-
-    auto addr = device->GetAddress();
-    if (m_enableUnicastFaces && Mac48Address::IsMatchingType(addr)) {
-      m_macaddr = boost::lexical_cast<std::string>(Mac48Address::ConvertFrom(addr));
-      NS_LOG_DEBUG("Save mac =" << m_macaddr);
+    if (faceId == 0) {
+      NS_LOG_INFO("Invalid face provided: " << face);
+      continue;
     }
+    
+    m_routingTable.registerPrefix(kNdvrHelloPrefix.toUri(), faceId, 0);
+    m_routingTable.registerPrefix(kNdvrDvInfoPrefix.toUri(), faceId, 0);
   }
-
+//  using namespace ns3;
+//  using namespace ns3::ndn;
+//
+//  int32_t metric = 0; // should it be 0 or std::numeric_limits<int32_t>::max() ??
+//  Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
+//  NS_LOG_DEBUG("THIS node is: " << thisNode->GetId());
+//
+//  for (uint32_t deviceId = 0; deviceId < thisNode->GetNDevices(); deviceId++) {
+//    Ptr<NetDevice> device = thisNode->GetDevice(deviceId);
+//    Ptr<L3Protocol> ndn = thisNode->GetObject<L3Protocol>();
+//    NS_ASSERT_MSG(ndn != nullptr, "Ndn stack should be installed on the node");
+//
+//    auto face = ndn->getFaceByNetDevice(device);
+//    NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
+//
+//    NS_LOG_DEBUG("FibHelper::AddRoute prefix=" << kNdvrPrefix << " via faceId=" << face->getId());
+//    FibHelper::AddRoute(thisNode, kNdvrHelloPrefix, face, metric);
+//    FibHelper::AddRoute(thisNode, kNdvrDvInfoPrefix, face, metric);
+//
+//    auto addr = device->GetAddress();
+//    if (m_enableUnicastFaces && Mac48Address::IsMatchingType(addr)) {
+//      m_macaddr = boost::lexical_cast<std::string>(Mac48Address::ConvertFrom(addr));
+//      NS_LOG_DEBUG("Save mac =" << m_macaddr);
+//    }
+//  }
+//
 }
 
 std::string
@@ -166,6 +219,15 @@ Ndvr::GetNeighborToken() {
 
 void
 Ndvr::SendHelloInterest() {
+  /* check whether exists a scheduled SendHelloInterest son. If that is so, 
+   * skip this call */
+  auto diff = time::duration_cast<time::seconds>(
+      m_nextHelloTime - time::steady_clock::now());
+  if (diff > time::seconds(0) && diff <= time::seconds(m_helloIntervalIni)) {
+    NS_LOG_DEBUG("Ignoring SendHelloInterest, it will be called in " << diff);
+    return;
+  }
+
   /* First of all, cancel any previously scheduled events */
   sendhello_event.cancel();
 
@@ -177,7 +239,7 @@ Ndvr::SendHelloInterest() {
   NS_LOG_INFO("Sending Interest " << name);
 
   Interest interest = Interest();
-  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
+  interest.setNonce(m_rand_nonce(m_rengine));
   interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setInterestLifetime(time::milliseconds(0));
@@ -191,13 +253,14 @@ Ndvr::SendHelloInterest() {
     params = params + "&" + m_macaddr;
   }
   if (!params.empty()) {
-    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(params.data()), params.size());
+    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(params.c_str()), params.size());
   }
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
                         [](const Interest&, const lp::Nack&) {},
                         [](const Interest&) {});
 
+  m_nextHelloTime = time::steady_clock::now() + time::seconds(m_helloIntervalCur);
   sendhello_event = m_scheduler.schedule(time::seconds(m_helloIntervalCur),
                                         [this] { SendHelloInterest(); });
 }
@@ -205,7 +268,7 @@ Ndvr::SendHelloInterest() {
 void
 Ndvr::UpdateNeighHelloTimeout(NeighborEntry& neighbor) {
   auto diff = neighbor.GetLastSeenDelta();
-  time::seconds timeout = time::seconds(3) + 2*std::max(time::seconds(m_helloIntervalIni), diff);
+  time::seconds timeout = time::seconds(2) + 1*std::max(time::seconds(m_helloIntervalCur), diff);
   neighbor.SetHelloTimeout(timeout);
 }
 
@@ -214,9 +277,20 @@ Ndvr::RescheduleNeighRemoval(NeighborEntry& neighbor) {
   neighbor.removal_event.cancel();
   const std::string neigh_prefix = neighbor.GetName();
   neighbor.removal_event = m_scheduler.schedule(neighbor.GetHelloTimeout(),
+                            // TODO: confirm the timeout is because the neighbor is no longer reachable
+                            //  or it is just busy and couldnt answer (or the shared medium is busy)
+                            //[this, neigh_prefix] { ConfirmNeighTimeout(neigh_prefix); });
                             [this, neigh_prefix] { RemoveNeighbor(neigh_prefix); });
   neighbor.UpdateLastSeen();
 }
+
+/*
+void
+Ndvr::ConfirmNeighTimeout(const std::string neigh) {
+  // TODO: send a special dvinfointerest with version=0
+  // TODO: ontimeout of this special dvinfointerest, then remove the node
+}
+*/
 
 void
 Ndvr::RemoveNeighbor(const std::string neigh) {
@@ -227,7 +301,7 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
     return;
   }
 
-  //bool need_adv = false;
+  bool has_changed = false;
 
   // remove all routes whose next-hop is this neighbor (instead of remove, we increase the cost)
   for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
@@ -235,11 +309,13 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
       it->second.SetCost(neigh_it->second.GetFaceId(),
           std::numeric_limits<uint32_t>::max());
       it->second.IncSeqNum(1);
-      //need_adv = true;
+      has_changed = true;
     }
     /* For local routes, increment the seqNum by 2 */
-    if (it->second.isDirectRoute())
+    if (it->second.isDirectRoute()) {
       it->second.IncSeqNum(2);
+      has_changed = true;
+    }
   }
 
   // remove from neighbor map
@@ -249,11 +325,12 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
   // insert into recently removed
   // TODO
 
-  //if (need_adv) {
+  if (has_changed) {
+    m_routingTable.IncVersion();
   //  /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
   //  ResetHelloInterval();
-  //  SendHelloInterest();
-  //}
+    SendHelloInterest();
+  }
 }
 
 void Ndvr::SchedDvInfoInterest(NeighborEntry& neighbor, bool wait, uint32_t retx) {
@@ -285,7 +362,7 @@ void Ndvr::SchedDvInfoInterest(NeighborEntry& neighbor, bool wait, uint32_t retx
   if (wait)
     backoffTime = 750000;
   /* workaround to avoid wifi collisions */
-  backoffTime += 10*m_rand->GetValue(0, 19999);
+  backoffTime += 10*m_rand_backoff(m_rengine);
   NS_LOG_INFO("SchedDvInfoInterest name=" << n << " wait=" << wait << " backoffTime=" << backoffTime);
 
   dvinfointerest_event[n] = m_scheduler.schedule(
@@ -310,7 +387,7 @@ Ndvr::SendDvInfoInterest(const std::string& neighbor_name, uint32_t retx) {
   name.appendNumber(neighbor.GetVersion());
 
   Interest interest = Interest();
-  interest.setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
+  interest.setNonce(m_rand_nonce(m_rengine));
   interest.setName(name);
   interest.setCanBePrefix(false);
   interest.setMustBeFresh(true);
@@ -352,7 +429,7 @@ void Ndvr::processInterest(const ndn::Interest& interest) {
     //NS_LOG_DEBUG("Discarding Interest from internal face: " << interest);
     return;
   }
-  NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
+  //NS_LOG_INFO("Interest: " << interest << " inFaceId=" << inFaceId);
 
   const ndn::Name interestName(interest.getName());
   if (kNdvrHelloPrefix.isPrefixOf(interestName))
@@ -445,7 +522,8 @@ void Ndvr::OnHelloInterest(const ndn::Interest& interest, uint64_t inFaceId) {
   }
   UpdateNeighHelloTimeout(neigh->second);
   RescheduleNeighRemoval(neigh->second);
-  if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion()) && numPrefixes >= m_routingTable.size()) {
+  //if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion()) && numPrefixes >= m_routingTable.size()) {
+  if (numPrefixes > 0 && (newNeigh || version > neigh->second.GetVersion())) {
     neigh->second.SetVersion(version);
 
     /* does we really have a change? */
@@ -489,12 +567,16 @@ void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   data->setFreshnessPeriod(ndn::time::milliseconds(1000));
   // Set dvinfo
   std::string dvinfo_str;
-  EncodeDvInfo(dvinfo_str);
+  if (interest.getName().get(-1).toNumber() > 0) {
+    EncodeDvInfo(dvinfo_str);
+  }
   NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size() << " I=" << interest.getName());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
-  data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.data()), dvinfo_str.size());
+  data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.c_str()), dvinfo_str.size());
   // Sign and send
   m_keyChain.sign(*data, m_signingInfo);
+  //m_keyChain.sign(*data);
+  NS_LOG_INFO("Replying DV-Info success!");
   m_face.put(*data);
 }
 
@@ -570,8 +652,8 @@ void Ndvr::OnDvInfoContent(const ndn::Interest& interest, const ndn::Data& data)
   }
 
   /* Security validation */
-  if (data.getSignature().hasKeyLocator()) {
-    NS_LOG_DEBUG("Data signed with: " << data.getSignature().getKeyLocator().getName());
+  if (data.getSignatureInfo().hasKeyLocator()) {
+    NS_LOG_DEBUG("Data signed with: " << data.getSignatureInfo().getKeyLocator().getName());
   }
 
 
@@ -664,13 +746,15 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
     uint32_t neigh_cost = entry.second.GetCost();
     NS_LOG_INFO("===>> prefix=" << neigh_prefix << " seqNum=" << neigh_seq << " recvCost=" << neigh_cost);
 
-    /* Sanity checks: 1) ignore our own name prefixes (direct route); 2) ignore invalid seqNum; 3) ignore invalid Cost */
-    if (m_routingTable.isDirectRoute(neigh_prefix) || neigh_seq <= 0 || !isValidCost(neigh_cost))
+    /* Sanity checks: 1) ignore invalid seqNum; 2) ignore invalid Cost */
+    if (neigh_seq <= 0 || !isValidCost(neigh_cost))
       continue;
 
     /* insert new prefix */
-    RoutingEntry localRE;
-    if (!m_routingTable.LookupRoute(neigh_prefix, localRE)) {
+    auto localRE = m_routingTable.LookupRoute(neigh_prefix);
+    if (localRE == nullptr) {
+      if (isInfinityCost(neigh_cost))
+        continue;
       NS_LOG_INFO("======>> New prefix! Just insert it " << neigh_prefix);
       entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
       entry.second.SetFaceId(neighbor.GetFaceId());
@@ -680,14 +764,29 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
       continue;
     }
 
+    /* Direct routes with higher sequence number means we should update ours */
+    if (localRE->isDirectRoute()) {
+      if (neigh_seq > localRE->GetSeqNum()) {
+        localRE->IncSeqNum(2);
+        has_changed = true;
+      }
+      continue;
+    }
+
     /* cost is "infinity", so remove it */
     if (isInfinityCost(neigh_cost)) {
+      if (neigh_seq > localRE->GetSeqNum()) {
+        NS_LOG_INFO("======>> New SeqNum same cost, update! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+        localRE->SetSeqNum(neigh_seq);
+        has_changed = true;
+      }
+
       /* Delete route only if update was received from my nexthop neighbor */
-      if (!localRE.isNextHop(neighbor.GetFaceId()))
+      if (!localRE->isNextHop(neighbor.GetFaceId()))
         continue;
 
       NS_LOG_INFO("======>> Infinity cost! Remove name prefix" << neigh_prefix);
-      m_routingTable.DeleteRoute(localRE, neighbor.GetFaceId());
+      m_routingTable.DeleteRoute(localRE->GetName(), neighbor.GetFaceId());
 
       has_changed = true;
       continue;
@@ -695,33 +794,49 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
 
     /* compare the Received and Local SeqNum (in Routing Entry)*/
     neigh_cost = CalculateCostToNeigh(neighbor, neigh_cost);
-    if (neigh_seq > localRE.GetSeqNum()) {
+    if (neigh_seq > localRE->GetSeqNum()) {
       // TODO:
       //   - Recv_Cost == Local_cost: update Local_SeqNum
       //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
-      if (localRE.GetCost() == neigh_cost) {
-        NS_LOG_INFO("======>> New SeqNum same cost, update name prefix! local_seqNum=" << localRE.GetSeqNum() << " neigh_seqNum=" << neigh_seq);
-        if (!localRE.isNextHop(neighbor.GetFaceId())) {
-          /* TODO: if they have the same cost but from different faces, could save for multipath */
-        }
-        localRE.SetSeqNum(neigh_seq);
-      } else {
-        NS_LOG_INFO("======>> New SeqNum diff cost, update name prefix! local_seqNum=" << localRE.GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE.GetCost() << " neigh_cost=" << neigh_cost);
-        /* Cost change will be handle by periodic updates */
-        localRE.SetCost(neigh_cost);
-        localRE.SetSeqNum(neigh_seq);
-        m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
+      if (localRE->GetCost() == neigh_cost) {
+        NS_LOG_INFO("======>> New SeqNum same cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+        localRE->SetSeqNum(neigh_seq);
         has_changed = true;
+        if (!localRE->isNextHop(neighbor.GetFaceId())) {
+          NS_LOG_INFO("======>> New SeqNum same cost from other next-hop, update!");
+          m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+        }
+      } else if (neigh_cost < localRE->GetCost()) {
+        NS_LOG_INFO("======>> New SeqNum diff lower cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE->GetCost() << " neigh_cost=" << neigh_cost);
+        /* Cost change will be handle by periodic updates */
+        localRE->SetCost(neigh_cost);
+        localRE->SetSeqNum(neigh_seq);
+        m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+        has_changed = true;
+      } else {
+        if (localRE->isNextHop(neighbor.GetFaceId()) || neigh_seq % 2 == 0) {
+          NS_LOG_INFO("======>> New SeqNum higher cost from same next-hop or even seq, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+          localRE->SetCost(neigh_cost);
+          localRE->SetSeqNum(neigh_seq);
+          m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+          has_changed = true;
+        } else {
+          NS_LOG_INFO("======>> New SeqNum higher cost from other next-hop and odd seqNum, just increase seqNum! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+          localRE->SetSeqNum(neigh_seq);
+          has_changed = true;
+        }
       }
-    } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost < localRE.GetCost()) {
-      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE.GetCost());
+    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost < localRE->GetCost()) {
+      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE->GetCost());
       /* Cost change will be handle by periodic updates */
       // TODO: wait SettlingTime, then update Local_Cost
-      localRE.SetCost(neigh_cost);
-      m_routingTable.UpdateRoute(localRE, neighbor.GetFaceId());
+      localRE->SetCost(neigh_cost);
+      m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
       has_changed = true;
-    } else if (neigh_seq == localRE.GetSeqNum() && neigh_cost >= localRE.GetCost()) {
-      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE.GetCost());
+    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost == localRE->GetCost()) {
+      NS_LOG_INFO("======>> Equal SeqNum and Equal Cost, local_cost=" << localRE->GetCost());
+    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost > localRE->GetCost()) {
+      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE->GetCost());
       // TODO: save this new prefix as well to multipath
     } else {
       /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
@@ -734,7 +849,7 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
     //UpdateRoutingTableDigest();
     /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
     //ResetHelloInterval();
-    //SendHelloInterest();
+    SendHelloInterest();
   }
 }
 
@@ -745,7 +860,7 @@ Ndvr::CalculateCostToNeigh(NeighborEntry& neighbor, uint32_t cost) {
 
 bool
 Ndvr::isValidCost(uint32_t cost) {
-  return cost < std::numeric_limits<uint32_t>::max();
+  return cost <= std::numeric_limits<uint32_t>::max();
 }
 
 bool
@@ -767,38 +882,39 @@ void Ndvr::AdvNamePrefix(std::string name) {
    * */
   m_routingTable.insert(routingEntry);
   m_routingTable.IncVersion();
-  //if (sendhello_event) {
+  if (sendhello_event) {
   //  ResetHelloInterval();
-  //  SendHelloInterest();
-  //}
+    SendHelloInterest();
+  }
 }
 
 uint64_t Ndvr::CreateUnicastFace(std::string mac) {
-  ns3::Ptr<ns3::Node> thisNode = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
-  ns3::Ptr<ns3::NetDevice> netDevice = thisNode->GetDevice(0);
-  ns3::Ptr<ns3::ndn::L3Protocol> ndn = thisNode->GetObject<ns3::ndn::L3Protocol>();
-  std::string myUrl = "netdev://[" + boost::lexical_cast<std::string>(ns3::Mac48Address::ConvertFrom(netDevice->GetAddress())) + "]";
-  //std::string neighUri = "netdev://[" + mac + "]";
-
-  // Create an ndnSIM-specific transport instance
-  ::nfd::face::GenericLinkService::Options opts;
-  opts.allowFragmentation = true;
-  opts.allowReassembly = true;
-  opts.allowCongestionMarking = true;
-
-  auto linkService = std::make_unique<::nfd::face::GenericLinkService>(opts);
-
-
-  auto transport = std::make_unique<ns3::ndn::UnicastNetDeviceTransport>(thisNode, netDevice,
-                                                   myUrl,
-                                                   //neighUri);
-                                                   mac);
-  auto face = std::make_shared<::nfd::face::Face>(std::move(linkService), std::move(transport));
-  face->setMetric(1);
-
-  ndn->addFace(face);
-
-  return face->getId();
+//  ns3::Ptr<ns3::Node> thisNode = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
+//  ns3::Ptr<ns3::NetDevice> netDevice = thisNode->GetDevice(0);
+//  ns3::Ptr<ns3::ndn::L3Protocol> ndn = thisNode->GetObject<ns3::ndn::L3Protocol>();
+//  std::string myUrl = "netdev://[" + boost::lexical_cast<std::string>(ns3::Mac48Address::ConvertFrom(netDevice->GetAddress())) + "]";
+//  //std::string neighUri = "netdev://[" + mac + "]";
+//
+//  // Create an ndnSIM-specific transport instance
+//  ::nfd::face::GenericLinkService::Options opts;
+//  opts.allowFragmentation = true;
+//  opts.allowReassembly = true;
+//  opts.allowCongestionMarking = true;
+//
+//  auto linkService = std::make_unique<::nfd::face::GenericLinkService>(opts);
+//
+//
+//  auto transport = std::make_unique<ns3::ndn::UnicastNetDeviceTransport>(thisNode, netDevice,
+//                                                   myUrl,
+//                                                   //neighUri);
+//                                                   mac);
+//  auto face = std::make_shared<::nfd::face::Face>(std::move(linkService), std::move(transport));
+//  face->setMetric(1);
+//
+//  ndn->addFace(face);
+//
+//  return face->getId();
+return 0;
 }
 } // namespace ndvr
 } // namespace ndn

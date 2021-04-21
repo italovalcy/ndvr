@@ -5,8 +5,15 @@
 
 #include "ndvr.hpp"
 
-#include "ns3/ndnSIM/helper/ndn-stack-helper.hpp"
+#include "ns3/core-module.h"
 #include "ns3/application.h"
+#include <ns3/simulator.h>
+#include <ns3/log.h>
+#include <ns3/ptr.h>
+#include <ns3/node.h>
+#include <ns3/node-list.h>
+#include "ns3/ndnSIM/helper/ndn-stack-helper.hpp"
+#include "ns3/ndnSIM/model/ndn-l3-protocol.hpp"
 
 namespace ns3 {
 
@@ -24,6 +31,8 @@ public:
                     ndn::MakeNameAccessor(&NdvrApp::network_), ndn::MakeNameChecker())
       .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
                     ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker())
+      .AddAttribute("ValidationConfig", "Secutiry Validation config file", StringValue("config/validation.conf"),
+                    MakeStringAccessor(&NdvrApp::validationConfig_), MakeStringChecker())
       .AddAttribute("SyncDataRounds", "Deprecated: Number of rounds to run the sync data process", IntegerValue(0),
                     MakeIntegerAccessor(&NdvrApp::syncDataRounds_), MakeIntegerChecker<int32_t>())
       .AddAttribute("EnableUnicastFace", "Enable dynamic creating unicast faces", BooleanValue(false),
@@ -44,10 +53,25 @@ public:
   void AddSigningInfo(::ndn::security::SigningInfo signingInfo) {
     signingInfo_ = signingInfo;
   }
+  
+  void getFacesFromNetdev() {
+    using namespace ns3;
+    using namespace ns3::ndn;
+    Ptr<Node> thisNode = NodeList::GetNode(Simulator::GetContext());
+    for (uint32_t deviceId = 0; deviceId < thisNode->GetNDevices(); deviceId++) {
+      Ptr<NetDevice> device = thisNode->GetDevice(deviceId);
+      Ptr<L3Protocol> ndn = thisNode->GetObject<L3Protocol>();
+      NS_ASSERT_MSG(ndn != nullptr, "Ndn stack should be installed on the node");
+      auto face = ndn->getFaceByNetDevice(device);
+      NS_ASSERT_MSG(face != nullptr, "There is no face associated with the net-device");
+      faces_.push_back(std::to_string(face->getId()));
+    }
+  }
 
 protected:
   virtual void StartApplication() {
-    m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
+    getFacesFromNetdev();
+    m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_, faces_, validationConfig_));
     m_instance->EnableUnicastFaces(unicastFaces_);
     m_instance->Start();
   }
@@ -65,6 +89,8 @@ private:
   std::vector<std::string> namePrefixes_;
   uint32_t syncDataRounds_;      // number of rounds to sync data (for data sync experiment)
   bool unicastFaces_;
+  std::string validationConfig_;
+  std::vector<std::string> faces_;
 };
 
 } // namespace ns3

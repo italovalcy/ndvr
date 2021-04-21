@@ -10,7 +10,7 @@ import os
 def options(opt):
     opt.load(['compiler_c', 'compiler_cxx'])
     opt.load(['default-compiler-flags',
-              'boost', 'ns3', 'protoc'],
+              'boost', 'protoc'],
              tooldir=['.waf-tools'])
 
     opt.add_option('--logging',action='store_true',default=True,dest='logging',help='''enable logging in simulation scripts''')
@@ -27,6 +27,10 @@ def options(opt):
     opt.add_option('--time',
                    help=('Enable time for the executed command'),
                    action="store_true", default=False, dest='time')
+#    opt.add_option('--enable-nlsr',
+#                   help=('Compile NS-3 with NLSR simulation support'),
+#                   dest='enable_nlsr', action='store_true',
+#                   default=False)
 
 MANDATORY_NS3_MODULES = ['core', 'network', 'point-to-point', 'applications', 'mobility', 'ndnSIM']
 OTHER_NS3_MODULES = ['antenna', 'aodv', 'bridge', 'brite', 'buildings', 'click', 'config-store', 'csma', 'csma-layout', 'dsdv', 'dsr', 'emu', 'energy', 'fd-net-device', 'flow-monitor', 'internet', 'lte', 'mesh', 'mpi', 'netanim', 'nix-vector-routing', 'olsr', 'openflow', 'point-to-point-layout', 'propagation', 'spectrum', 'stats', 'tap-bridge', 'topology-read', 'uan', 'virtual-net-device', 'visualizer', 'wifi', 'wimax']
@@ -34,23 +38,26 @@ OTHER_NS3_MODULES = ['antenna', 'aodv', 'bridge', 'brite', 'buildings', 'click',
 def configure(conf):
     conf.load(['compiler_c', 'compiler_cxx',
                'default-compiler-flags',
-               'boost', 'ns3', 'protoc'])
+               'boost', 'protoc'])
+
+    conf.check_cfg(package='libndn-cxx', args=['--cflags', '--libs'],
+                   uselib_store='NDN_CXX', mandatory=True)
 
     if not os.environ.has_key('PKG_CONFIG_PATH'):
         os.environ['PKG_CONFIG_PATH'] = ':'.join([
             '/usr/local/lib/pkgconfig',
             '/opt/local/lib/pkgconfig'])
 
-    try:
-        conf.check_ns3_modules(MANDATORY_NS3_MODULES)
-        for module in OTHER_NS3_MODULES:
-            conf.check_ns3_modules(module, mandatory = False)
-    except:
-        Logs.error ("NS-3 or one of the required NS-3 modules not found")
-        Logs.error ("NS-3 needs to be compiled and installed somewhere.  You may need also to set PKG_CONFIG_PATH variable in order for configure find installed NS-3.")
-        Logs.error ("For example:")
-        Logs.error ("    PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH ./waf configure")
-        conf.fatal ("")
+    #try:
+    #    conf.check_ns3_modules(MANDATORY_NS3_MODULES)
+    #    for module in OTHER_NS3_MODULES:
+    #        conf.check_ns3_modules(module, mandatory = False)
+    #except:
+    #    Logs.error ("NS-3 or one of the required NS-3 modules not found")
+    #    Logs.error ("NS-3 needs to be compiled and installed somewhere.  You may need also to set PKG_CONFIG_PATH variable in order for configure find installed NS-3.")
+    #    Logs.error ("For example:")
+    #    Logs.error ("    PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH ./waf configure")
+    #    conf.fatal ("")
 
     if conf.options.debug:
         conf.define ('NS3_LOG_ENABLE', 1)
@@ -68,25 +75,38 @@ def configure(conf):
         conf.define('NS3_ASSERT_ENABLE', 1)
 
 def build (bld):
-    deps =  ' '.join (['ns3_'+dep for dep in MANDATORY_NS3_MODULES + OTHER_NS3_MODULES]).upper ()
+    #deps =  ' '.join (['ns3_'+dep for dep in MANDATORY_NS3_MODULES + OTHER_NS3_MODULES]).upper ()
 
-    common = bld.objects (
-        target = "extensions",
-        features = ["cxx"],
-        source = bld.path.ant_glob(['extensions/**/*.cc', 'extensions/**/*.cpp', 'extensions/**/*.proto']),
-        use = deps,
-        includes = "extensions"
-        )
+    #common = bld.objects (
+    #    target = "extensions",
+    #    features = ["cxx"],
+    #    source = bld.path.ant_glob(['extensions/**/*.cc', 'extensions/**/*.cpp', 'extensions/**/*.proto']),
+    #    use = deps,
+    #    includes = "extensions"
+    #    )
 
-    for scenario in bld.path.ant_glob(['scenarios/*.cc', 'scenarios/*.cpp']):
-        name = scenario.change_ext('').path_from(bld.path.find_node('scenarios/').get_bld())
-        app = bld.program (
-            target = name,
-            features = ['cxx'],
-            source = [scenario],
-            use = deps + " extensions",
-            includes = "extensions"
-            )
+    #for scenario in bld.path.ant_glob(['scenarios/*.cc', 'scenarios/*.cpp']):
+    #    name = scenario.change_ext('').path_from(bld.path.find_node('scenarios/').get_bld())
+    #    app = bld.program (
+    #        target = name,
+    #        features = ['cxx'],
+    #        source = [scenario],
+    #        use = deps + " extensions",
+    #        includes = "extensions"
+    #        )
+
+    bld.objects(
+        target='ndvrd-objects',
+        source=bld.path.ant_glob(['extensions/*.cpp', 'extensions/*.proto'], excl='extensions/ndvr-app.* extensions/asf-* extensions/localhop-strategy.cpp extensions/rangeconsumer* extensions/admit-localhop-unsolicited-data-policy.* extensions/unicast-net-device-transport.* extensions/simplepubsub*'),
+        includes = "extensions",
+        use='NDN_CXX BOOST')
+
+    bld.program(
+        target='ndvrd/ndvrd',
+        name='ndvrd',
+        source='ndvrd/main.cpp',
+        includes = "extensions",
+        use='ndvrd-objects')
 
 def shutdown (ctx):
     if Options.options.run:

@@ -2,6 +2,7 @@
 #define _ROUTINGTABLE_H_
 
 #include <map>
+#include <ndn-cxx/mgmt/nfd/controller.hpp>
 
 
 namespace ndn {
@@ -93,41 +94,52 @@ private:
  *   The Distance Vector Information contains a collection of Routes (ie,
  *   Name Prefixes), Cost and Sequence Number, each represents a piece of 
  *   dynamic routing information learned from neighbors.
- *
- *   TODO: Routes associated with the same namespace are collected 
- *   into a RIB entry.
  */
+typedef std::map<std::string, RoutingEntry> RoutingTable;
+
 //class RoutingTable : public std::map<std::string, RoutingEntry> {
-class RoutingTable {
+class RoutingManager {
 public:
   /* The fact that the elements in a map are always sorted by its key 
    * is important for us for the digest calculation */
-  std::map<std::string, RoutingEntry> m_rt;
+  RoutingTable m_rt;
 
-  RoutingTable()
+  RoutingManager()
     : m_version(1)
     , m_digest("0")
   {
   }
 
-  ~RoutingTable() {}
+  RoutingManager(ndn::Face& face, ndn::KeyChain& keyChain)
+    : m_version(1)
+    , m_digest("0")
+    , m_face(face.getIoService())
+  {
+    m_controller = new ndn::nfd::Controller(face, keyChain);
+    //m_netmon = make_shared<ndn::net::NetworkMonitor>(face.getIoService());
+  }
+
+  ~RoutingManager() {}
 
   void UpdateRoute(RoutingEntry& e, uint64_t new_nh);
   void AddRoute(RoutingEntry& e);
-  void DeleteRoute(RoutingEntry& e, uint64_t nh);
+  void DeleteRoute(std::string name, uint64_t nh);
   bool isDirectRoute(std::string n);
-  bool LookupRoute(std::string n);
-  bool LookupRoute(std::string n, RoutingEntry& e);
+  RoutingEntry* LookupRoute(std::string n);
   void insert(RoutingEntry& e);
   void UpdateDigest();
   void unregisterPrefix(std::string name, uint64_t faceId);
-  void registerPrefix(std::string name, uint64_t faceId, uint32_t cost);
+  void registerPrefix(std::string name, uint64_t faceId, uint32_t cost, uint8_t retry = 0);
+  uint64_t createFace(std::string faceUri);
+  void enableLocalFields();
+  void setMulticastStrategy(std::string name);
 
   uint32_t GetVersion() {
     return m_version;
   }
   void IncVersion() {
     m_version++;
+    UpdateDigest();
   }
 
   std::string GetDigest() const {
@@ -145,6 +157,9 @@ public:
 private:
   uint32_t m_version;
   std::string m_digest;
+  ndn::Face m_face;
+  ndn::nfd::Controller *m_controller;
+  //shared_ptr<ndn::net::NetworkMonitor> m_netmon;
 };
 
 } // namespace ndvr

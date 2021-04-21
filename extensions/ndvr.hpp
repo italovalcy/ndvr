@@ -10,6 +10,7 @@
 #include <string>
 #include <random>
 
+//#include <ns3/core-module.h>
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/interest.hpp>
 #include <ndn-cxx/security/key-chain.hpp>
@@ -17,8 +18,6 @@
 #include <ndn-cxx/security/validator-config.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
 #include <ndn-cxx/util/time.hpp>
-#include <ns3/core-module.h>
-#include <ns3/random-variable-stream.h>
 
 #include "routing-table.hpp"
 #include "ndvr-message.pb.h"
@@ -105,8 +104,9 @@ private:
 class Ndvr
 {
 public:
-  Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np);
+  Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np, std::vector<std::string>& faces, std::string validationConfig);
   void run();
+  void cleanup();
   void Start();
   void Stop();
   void AdvNamePrefix(std::string name);
@@ -119,6 +119,10 @@ public:
 
   void EnableUnicastFaces(bool flag) {
     m_enableUnicastFaces = flag;
+  }
+
+  void SetHelloInterval(int x) {
+    m_helloIntervalCur = x;
   }
 
 private:
@@ -234,22 +238,27 @@ private:
 
 private:
   const ndn::security::SigningInfo& m_signingInfo;
+  ndn::Face m_face;
   ndn::Scheduler m_scheduler;
   ndn::ValidatorConfig m_validator;
   uint32_t m_seq;
-  ns3::Ptr<ns3::UniformRandomVariable> m_rand; ///< @brief nonce generator
+  //std::uniform_int_distribution<int> m_rand_nonce(0,std::numeric_limits<int>::max());
+  //std::uniform_int_distribution<int> m_rand_backoff(0, 19999);
+  std::uniform_int_distribution<int> m_rand_nonce;
+  std::uniform_int_distribution<int> m_rand_backoff;
   Name m_network;
   Name m_routerName;
-  ndn::Face m_face;
+  std::vector<std::string> m_listenFaces;
 
   ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
   NeighborMap m_neighMap;
   std::map<std::string, uint64_t> m_neighToFaceId;
-  RoutingTable m_routingTable;
+  RoutingManager m_routingTable;
   int m_helloIntervalIni;
   int m_helloIntervalCur;
   int m_helloIntervalMax;
+  time::steady_clock::TimePoint m_nextHelloTime = time::steady_clock::TimePoint::max();
   int m_localRTInterval;
   int m_localRTTimeout;
   bool m_enableUnicastFaces = true;
