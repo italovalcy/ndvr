@@ -1,0 +1,15 @@
+# -*- Mode: python; py-indent-offset: 4; indent-tabs-mode: nil; coding: utf-8; -*-
+top = '..'
+
+def build(bld):
+
+    bld.objects(
+        target='ndvr-objects',
+        source=bld.path.ant_glob('../extensions/*.cpp', excl='../extensions/ndvr-app.cpp'),
+        use='NDN_CXX BOOST')
+
+    bld.program(
+        target='ndvrd',
+        name='ndvrd',
+        source='main.cpp',
+        use='ndvrd-objects')
