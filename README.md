@@ -54,6 +54,44 @@ protocol. To just run the code without debug:
 
     ./waf --run ndn-ndvr-ring-3
 
+Emulated environment
+====================
+
+Install Mini-NDN:
+
+	cd ~/
+	git clone https://github.com/named-data/mini-ndn
+	git checkout tags/v0.5.0
+	./install.sh -a
+
+Test if the MiniNDN installation succeeded:
+
+	sudo rm -rf /tmp/minindn
+	sudo python examples/nlsr/pingall.py
+	grep -c content /tmp/minindn/*/ping-data/*.txt
+
+Install NDVR:
+
+	cd ~/
+	git clone https://github.com/italovalcy/ndvr
+	git checkout ndvr-emu
+	./waf configure --debug
+	./waf
+
+Copy the files needed to run NDVR under MiniNDN:
+
+	cp config/validation.conf /usr/local/etc/ndn/ndvr-validation.conf
+	cp minindn/apps/ndvr.py ~/mini-ndn/minindn/apps/ndvr.py
+	cp minindn/ndvr* ~/mini-ndn/examples/
+	cp minindn/nlsr-paper.py ~/mini-ndn/examples/nlsr/
+	cp minindn/topologies/* ~/mini-ndn/topologies/
+
+Test if NDVR integration with MiniNDN succeeded:
+
+	sudo rm -rf /tmp/minindn
+	sudo python examples/ndvr-pingall.py
+	grep -c content /tmp/minindn/*/ping-data/*.txt
+
 More information
 ================
 
