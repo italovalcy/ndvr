@@ -1,7 +1,8 @@
 #ifndef ADMIT_LOCALHOP_UNSOLICITED_DATA_POLICY_HPP
 #define ADMIT_LOCALHOP_UNSOLICITED_DATA_POLICY_HPP
 
-#include "face/face.hpp"
+//#include "face/face.hpp"
+#include <ndn-cxx/face.hpp>
 #include "fw/unsolicited-data-policy.hpp"
 
 namespace nfd {
