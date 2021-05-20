@@ -67,26 +67,14 @@ def configure(conf):
         conf.define('NS3_LOG_ENABLE', 1)
         conf.define('NS3_ASSERT_ENABLE', 1)
 
-    conf.write_config_header('ndn-svs/config.hpp', remove=False)
-
 def build (bld):
     deps =  ' '.join (['ns3_'+dep for dep in MANDATORY_NS3_MODULES + OTHER_NS3_MODULES]).upper ()
-
-    ndnSVS = bld.objects (
-         target = "ndn-svs",
-         features = ["cxx"],
-         source = bld.path.ant_glob(['ndn-svs/ndn-svs/**/*.cpp'],
-                                     excl=[]),
-         includes = "ndn-svs",
-         export_includes = "ndn-svs",
-         use = deps
-         )
 
     common = bld.objects (
         target = "extensions",
         features = ["cxx"],
         source = bld.path.ant_glob(['extensions/**/*.cc', 'extensions/**/*.cpp', 'extensions/**/*.proto']),
-        use = deps + " ndn-svs",
+        use = deps,
         includes = "extensions"
         )
 
@@ -96,9 +84,8 @@ def build (bld):
             target = name,
             features = ['cxx'],
             source = [scenario],
-            use = deps + " extensions ndn-svs",
-            includes = "extensions",
-            export_includes = "extensions"
+            use = deps + " extensions",
+            includes = "extensions"
             )
 
 def shutdown (ctx):
