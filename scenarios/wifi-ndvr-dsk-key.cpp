@@ -65,25 +65,23 @@ main(int argc, char* argv[])
   int range = 60;
   std::string traceFile;
   double distance = 800;
-  uint32_t syncDataRounds = 5;
   bool tracing = false;
   std::string keyType = "e"; // default ECDSA
   bool enableDSK = false;
+  uint32_t duration = 200;
 
   CommandLine cmd;
   cmd.AddValue("numNodes", "numNodes", numNodes);
   cmd.AddValue("wifiRange", "the wifi range", range);
   cmd.AddValue ("distance", "distance (m)", distance);
-  cmd.AddValue ("syncDataRounds", "number of rounds to run the publish / sync Data", syncDataRounds);
   cmd.AddValue("run", "run number", run);
   cmd.AddValue("traceFile", "Ns2 movement trace file", traceFile);
   cmd.AddValue("tracing", "enable wifi tracing", tracing);
   cmd.AddValue("keyType", "key type", keyType);
   cmd.AddValue("enableDSK", "enable DSK", enableDSK);
+  cmd.AddValue("duration", "duration (s)", duration);
   cmd.Parse(argc, argv);
   RngSeedManager::SetRun (run);
-  /* each sync data round interval is ~40s and we give more 3x more time to finish the sync process, plus extra 128s */
-  uint32_t sim_time = 128 + syncDataRounds*40*3;
 
   ////////////////////////////////
   // Wi-Fi begin
@@ -176,7 +174,7 @@ main(int argc, char* argv[])
     app->AddNamePrefix(namePrefix.toUri());
     app->SetKeyType(keyType);
     if (enableDSK) {
-			app->EnableDSKMaxSecs(60);
+	app->EnableDSKMaxSecs(120);
     }
 
     // Producer
@@ -193,9 +191,8 @@ main(int argc, char* argv[])
   Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/MacTxDrop", MakeCallback(&MacTxDrop));
   Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/PhyRxDrop", MakeCallback(&PhyRxDrop));
   Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/PhyTxDrop", MakeCallback(&PhyTxDrop));
-  Simulator::Schedule(Seconds(sim_time - 5), &PrintDrop);
 
-  Simulator::Stop(Seconds(sim_time));
+  Simulator::Stop(Seconds(duration));
 
   Simulator::Run();
   Simulator::Destroy();
