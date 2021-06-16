@@ -9,8 +9,20 @@
 namespace ndn {
 namespace ndvr {
 
+inline const ndn::KeyParams&
+getKeyType(std::string keyType)
+{
+	if (keyType == "r") {
+		static RsaKeyParams keyParams;
+		return keyParams;
+	}
+
+	static EcKeyParams keyParams;
+	return keyParams;
+}
+
 inline void
-setupRootCert(const ndn::Name& subjectName, std::string filename) {
+setupRootCert(const ndn::Name& subjectName, std::string filename, std::string keyType = "e") {
   ndn::KeyChain keyChain;
   try {
     /* cleanup: remove any possible existing certificate with the same name */
@@ -18,7 +30,7 @@ setupRootCert(const ndn::Name& subjectName, std::string filename) {
   }
   catch (const std::exception& e) {
   }
-  ndn::security::Identity subjectId = keyChain.createIdentity(subjectName);
+  ndn::security::Identity subjectId = keyChain.createIdentity(subjectName, getKeyType(keyType));
 
   if (filename.empty())
     return;
@@ -34,7 +46,7 @@ setupRootCert(const ndn::Name& subjectName) {
 }
 
 inline ndn::security::SigningInfo
-setupSigningInfo(const ndn::Name subjectName, const ndn::Name issuerName) {
+setupSigningInfo(const ndn::Name subjectName, const ndn::Name issuerName, std::string keyType = "e") {
   // 1. Create identity/key/certificate (unsigned certificate)
   ndn::KeyChain keyChain;
   try {
@@ -43,7 +55,7 @@ setupSigningInfo(const ndn::Name subjectName, const ndn::Name issuerName) {
   }
   catch (const std::exception& e) {
   }
-  ndn::security::Identity subjectId = keyChain.createIdentity(subjectName);
+  ndn::security::Identity subjectId = keyChain.createIdentity(subjectName, getKeyType(keyType));
   ndn::security::v2::Certificate certReq = subjectId.getDefaultKey().getDefaultCertificate();
   ndn::security::v2::Certificate cert;
 

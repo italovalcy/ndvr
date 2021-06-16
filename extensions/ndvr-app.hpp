@@ -52,10 +52,15 @@ public:
     maxSizeDSK_ = x;
   }
 
+  void SetKeyType(std::string t) {
+    keyType_ = t;
+  }
+
 protected:
   virtual void StartApplication() {
     m_instance.reset(new ::ndn::ndvr::Ndvr(signingInfo_, network_, routerName_, namePrefixes_));
     m_instance->EnableUnicastFaces(unicastFaces_);
+    m_instance->SetKeyType(keyType_);
     if (maxSecsDSK_!=0 || maxSizeDSK_!=0) {
       m_instance->EnableDSK(true);
       m_instance->SetMaxSizeDSK(maxSizeDSK_);
@@ -79,6 +84,7 @@ private:
   bool unicastFaces_;
   uint32_t maxSecsDSK_ = 0;
   uint32_t maxSizeDSK_ = 0;
+  std::string keyType_ = "e";
 };
 
 } // namespace ns3
