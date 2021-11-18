@@ -77,6 +77,7 @@ Install NDVR:
 	git checkout ndvr-emu
 	./waf configure --debug
 	./waf
+	sudo ./waf install
 
 Copy the files needed to run NDVR under MiniNDN:
 
