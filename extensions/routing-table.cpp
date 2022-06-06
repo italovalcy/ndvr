@@ -2,7 +2,7 @@
 #include <sstream> 
 #include <string>
 #include <future>         // std::promise, std::future
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 
 #include "routing-table.hpp"
 #include <ndn-cxx/face.hpp>

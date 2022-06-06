@@ -5,7 +5,7 @@
 #include <cmath>
 #include <boost/algorithm/string.hpp> 
 #include <algorithm>
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 #include <ns3/simulator.h>
 #include <ns3/log.h>
 #include <ns3/ptr.h>

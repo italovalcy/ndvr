@@ -5,7 +5,7 @@
 #include <cmath>
 #include <boost/algorithm/string.hpp> 
 #include <algorithm>
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 //#include <ns3/simulator.h>
 //#include <ns3/log.h>
 //#include <ns3/ptr.h>
@@ -253,7 +253,7 @@ Ndvr::SendHelloInterest() {
     params = params + "&" + m_macaddr;
   }
   if (!params.empty()) {
-    interest.setApplicationParameters(reinterpret_cast<const uint8_t*>(params.c_str()), params.size());
+    interest.setApplicationParameters(make_span(reinterpret_cast<const uint8_t*>(params.c_str()), params.size()));
   }
 
   m_face.expressInterest(interest, [](const Interest&, const Data&) {},
@@ -572,7 +572,7 @@ void Ndvr::ReplyDvInfoInterest(const ndn::Interest& interest) {
   }
   NS_LOG_INFO("Replying DV-Info with encoded data: size=" << dvinfo_str.size() << " I=" << interest.getName());
   //NS_LOG_INFO("Sending DV-Info encoded: str=" << dvinfo_str);
-  data->setContent(reinterpret_cast<const uint8_t*>(dvinfo_str.c_str()), dvinfo_str.size());
+  data->setContent(make_span(reinterpret_cast<const uint8_t*>(dvinfo_str.c_str()), dvinfo_str.size()));
   // Sign and send
   m_keyChain.sign(*data, m_signingInfo);
   //m_keyChain.sign(*data);

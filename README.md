@@ -67,14 +67,16 @@ Install Mini-NDN:
 Test if the MiniNDN installation succeeded:
 
 	sudo rm -rf /tmp/minindn
-	sudo python examples/nlsr/pingall.py
+	sudo python3 examples/nlsr/pingall.py --no-cli --nPings 60
 	grep -c content /tmp/minindn/*/ping-data/*.txt
 
 Install NDVR:
 
 	cd ~/
 	git clone https://github.com/italovalcy/ndvr
+	cd ndvr
 	git checkout ndvr-emu
+	apt-get install protobuf-compiler libndn-cxx-dev libprotobuf-dev
 	./waf configure --debug
 	./waf
 	sudo ./waf install

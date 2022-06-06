@@ -77,7 +77,7 @@ class Ndvr(Application):
 
         # Create root certificate (only in the first run)
         if not os.path.isfile(rootCertFile):
-            sh('ndnsec-keygen {}'.format(rootName)) # Installs a self-signed cert into the system
+            sh('ndnsec-key-gen {}'.format(rootName)) # Installs a self-signed cert into the system
             sh('ndnsec-cert-dump -i {} > {}'.format(rootName, rootCertFile))
 
         # Create necessary certificates for each router
@@ -88,7 +88,7 @@ class Ndvr(Application):
         routerName = '{}/%C1.Router/{}'.format(self.network, self.node.name)
         routerKeyFile = '{}/router.keys'.format(self.homeDir)
         routerCertFile = '{}/router.cert'.format(self.homeDir)
-        self.node.cmd('ndnsec-keygen {} > {}'.format(routerName, routerKeyFile))
+        self.node.cmd('ndnsec-key-gen {} > {}'.format(routerName, routerKeyFile))
 
         # Copy routerKeyFile from remote for ndnsec-certgen
         if isinstance(self.node, RemoteMixin) and self.node.isRemote:
@@ -98,7 +98,7 @@ class Ndvr(Application):
             scp(src, dst)
 
         # Root key is in root namespace, must sign router key and then install on host
-        sh('ndnsec-certgen -s {} -r {} > {}'.format(rootName, routerKeyFile, routerCertFile))
+        sh('ndnsec-cert-gen -s {} -r {} > {}'.format(rootName, routerKeyFile, routerCertFile))
 
         # Copy root.cert and site.cert from localhost to remote host
         if isinstance(self.node, RemoteMixin) and self.node.isRemote:
