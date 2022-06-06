@@ -57,6 +57,13 @@ protocol. To just run the code without debug:
 Emulated environment
 ====================
 
+Using Docker:
+	docker pull italovalcy/ndvr:latest
+	docker run --rm -it --privileged -v /home/italo/ndvr:/ndvr -v /lib/modules:/lib/modules italovalcy/ndvr:latest bash -c 'python3 examples/ndvr-pingall.py --no-cli --nPings 60 /mini-ndn/topologies/default-topology.conf; grep -c content /tmp/minindn/*/ping-data/*.txt'
+
+
+*Or* you can also build from source, following the steps below:
+
 Install Mini-NDN:
 
 	cd ~/
