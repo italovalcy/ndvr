@@ -58,9 +58,9 @@ def getParser():
 
 def mcnFailure(ndn, nfds, ndvrs, args):
     sh('dstat --epoch --cpu --mem > {}/dstat 2>&1 & echo $! > {}/dstat.pid'.format(args.workDir, args.workDir))
-    sh('/home/italo/get-cpu-usage.sh ndvrd > {}/get-cpu-usage-ndvrd 2>&1 & echo $! > {}/get-cpu-usage-ndvrd.pid'.format(args.workDir, args.workDir))
-    sh('/home/italo/get-cpu-usage.sh ndnping > {}/get-cpu-usage-ndnping 2>&1 & echo $! > {}/get-cpu-usage-ndnping.pid'.format(args.workDir, args.workDir))
-    sh('/home/italo/get-cpu-usage.sh ndnpingserver > {}/get-cpu-usage-ndnpingserver 2>&1 & echo $! > {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir, args.workDir))
+    sh('/usr/local/bin/get-cpu-usage.sh ndvrd > {}/get-cpu-usage-ndvrd 2>&1 & echo $! > {}/get-cpu-usage-ndvrd.pid'.format(args.workDir, args.workDir))
+    sh('/usr/local/bin/get-cpu-usage.sh ndnping > {}/get-cpu-usage-ndnping 2>&1 & echo $! > {}/get-cpu-usage-ndnping.pid'.format(args.workDir, args.workDir))
+    sh('/usr/local/bin/get-cpu-usage.sh ndnpingserver > {}/get-cpu-usage-ndnpingserver 2>&1 & echo $! > {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir, args.workDir))
     sh('top -b -d 1 > {}/top 2>&1 & echo $! > {}/top.pid'.format(args.workDir, args.workDir))
     time.sleep(args.ctime)
 

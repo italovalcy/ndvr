@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates sudo curl mawk && \
+    git ca-certificates sudo curl mawk dstat procps && \
     update-ca-certificates && \
     alias python=python3 && \
     git clone https://github.com/named-data/mini-ndn.git && \
@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cp minindn/ndvr* /mini-ndn/examples/ && \
     cp minindn/nlsr-paper.py /mini-ndn/examples/nlsr/ && \
     cp minindn/topologies/* /mini-ndn/topologies/ && \
+    cp minindn/get-cpu-usage.sh /usr/local/bin/ && \
+    cd ../ && patch -p1 < ndvr/minindn/adjustments-minindn.patch && \
     rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh

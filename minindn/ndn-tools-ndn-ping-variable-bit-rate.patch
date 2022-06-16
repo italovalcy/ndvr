@@ -1,0 +1,204 @@
+diff --git a/tools/ping/client/main.cpp b/tools/ping/client/main.cpp
+index 590c2db..adf1278 100644
+--- a/tools/ping/client/main.cpp
++++ b/tools/ping/client/main.cpp
+@@ -160,9 +160,12 @@ main(int argc, char* argv[])
+   options.startSeq = 0;
+   options.shouldGenerateRandomSeq = true;
+   options.shouldPrintTimestamp = false;
++  options.mPoissonInterval = -1;
+
+   std::string identifier;
+
++  int mPoissonInterval;
++
+   namespace po = boost::program_options;
+
+   po::options_description visibleOptDesc("Options");
+@@ -180,6 +183,7 @@ main(int argc, char* argv[])
+                      "add identifier to the Interest names before the sequence numbers to avoid conflicts")
+     ("cache,a",     "allow routers to return stale Data from cache")
+     ("timestamp,t", "print timestamp with messages")
++    ("poisson-interval,P", po::value<int>(&mPoissonInterval), "Poisson distribution based random interval (mean)")
+   ;
+
+   po::options_description hiddenOptDesc;
+@@ -252,6 +256,15 @@ main(int argc, char* argv[])
+     if (optVm.count("timestamp") > 0) {
+       options.shouldPrintTimestamp = true;
+     }
++
++    if (optVm.count("poisson-interval") > 0) {
++      if (mPoissonInterval < 0) {
++        std::cerr << "ERROR: mean Poisson distribution must be positive" << std::endl;
++        usage(visibleOptDesc);
++      }
++
++      options.mPoissonInterval = mPoissonInterval;
++    }
+   }
+   catch (const po::error& e) {
+     std::cerr << "ERROR: " << e.what() << std::endl;
+diff --git a/tools/ping/client/ping.cpp b/tools/ping/client/ping.cpp
+index e3cb20f..25a6aeb 100644
+--- a/tools/ping/client/ping.cpp
++++ b/tools/ping/client/ping.cpp
+@@ -74,7 +74,7 @@ Ping::performPing()
+   ++m_nOutstanding;
+
+   if ((m_options.nPings < 0) || (m_nSent < m_options.nPings)) {
+-    m_nextPingEvent = m_scheduler.schedule(m_options.interval, [this] { performPing(); });
++    m_nextPingEvent = m_scheduler.schedule(calculateInterval(), [this] { performPing(); });
+   }
+   else {
+     finish();
+@@ -125,6 +125,15 @@ Ping::makePingName(uint64_t seq) const
+   return name;
+ }
+
++time::milliseconds
++Ping::calculateInterval() {
++  if (m_options.mPoissonInterval > 0) {
++    std::poisson_distribution<int> distribution(m_options.mPoissonInterval);
++    return time::milliseconds(distribution(random::getRandomNumberEngine()));
++  }
++  return m_options.interval;
++}
++
+ } // namespace client
+ } // namespace ping
+ } // namespace ndn
+diff --git a/tools/ping/client/ping.hpp b/tools/ping/client/ping.hpp
+index 48f2485..91a7620 100644
+--- a/tools/ping/client/ping.hpp
++++ b/tools/ping/client/ping.hpp
+@@ -48,6 +48,7 @@ struct Options
+   time::milliseconds timeout;       //!< timeout threshold
+   uint64_t startSeq;                //!< start ping sequence number
+   name::Component clientIdentifier; //!< client identifier
++  int mPoissonInterval;             //!< poisson distribution based random interval (mean)
+ };
+
+ /**
+@@ -114,6 +115,12 @@ private:
+   Name
+   makePingName(uint64_t seq) const;
+
++  /**
++   * @brief Calculate the inter-departure ping interval (constant or random)
++   */
++  time::milliseconds
++  calculateInterval();
++
+   /**
+    * @brief Performs individual ping
+    */
+diff --git a/tools/ping/server/main.cpp b/tools/ping/server/main.cpp
+index e81125c..1c14553 100644
+--- a/tools/ping/server/main.cpp
++++ b/tools/ping/server/main.cpp
+@@ -106,6 +106,7 @@ main(int argc, char* argv[])
+   std::string prefix;
+   auto nMaxPings = static_cast<std::make_signed_t<size_t>>(options.nMaxPings);
+   auto payloadSize = static_cast<std::make_signed_t<size_t>>(options.payloadSize);
++  std::string sizeUniformDist;
+
+   po::options_description visibleDesc("Options");
+   visibleDesc.add_options()
+@@ -118,6 +119,7 @@ main(int argc, char* argv[])
+                     "size of response payload")
+     ("timestamp,t", po::bool_switch(&options.wantTimestamp),
+                     "prepend a timestamp to each log message")
++    ("udist-size,U", po::value<std::string>(&sizeUniformDist), "Uniform distribution for packet size (min,max)")
+     ("quiet,q",     po::bool_switch(&options.wantQuiet),
+                     "do not print a log message each time a ping packet is received")
+     ("version,V",   "print program version and exit")
+@@ -184,6 +186,16 @@ main(int argc, char* argv[])
+   }
+   options.payloadSize = static_cast<size_t>(payloadSize);
+
++  if (vm.count("udist-size") > 0) {
++    try {
++      options.minPktSizeUniDis = stoi(sizeUniformDist);
++      options.maxPktSizeUniDis = stoi(sizeUniformDist.substr(sizeUniformDist.find(",")+1));
++    } catch (...) {
++      std::cerr << "ERROR: udist-size requires two values comma-separated: min_pkt_size,max_pkt_size" << std::endl;
++      return 2;
++    }
++  }
++
+   return Runner(options).run();
+ }
+
+diff --git a/tools/ping/server/ping-server.cpp b/tools/ping/server/ping-server.cpp
+index ad8177c..e08e656 100644
+--- a/tools/ping/server/ping-server.cpp
++++ b/tools/ping/server/ping-server.cpp
+@@ -23,6 +23,7 @@
+ #include "ping-server.hpp"
+
+ #include <ndn-cxx/security/signing-helpers.hpp>
++#include <ndn-cxx/util/random.hpp>
+
+ namespace ndn {
+ namespace ping {
+@@ -69,7 +70,15 @@ PingServer::onInterest(const Interest& interest)
+
+   auto data = make_shared<Data>(interest.getName());
+   data->setFreshnessPeriod(m_options.freshnessPeriod);
+-  data->setContent(m_payload);
++
++  auto randomPayloadSize = calculateRandomPayloadSize();
++  if (randomPayloadSize != -1) {
++    std::string content(randomPayloadSize, 'a');
++    data->setContent(reinterpret_cast<const uint8_t*>(content.c_str()), content.size());
++  } else {
++    data->setContent(m_payload);
++  }
++
+   m_keyChain.sign(*data, signingWithSha256());
+   m_face.put(*data);
+
+@@ -79,6 +88,15 @@ PingServer::onInterest(const Interest& interest)
+   }
+ }
+
++int
++PingServer::calculateRandomPayloadSize(){
++  if (m_options.minPktSizeUniDis > 0 && m_options.maxPktSizeUniDis > 0) {
++    std::uniform_int_distribution<int32_t> distribution(m_options.minPktSizeUniDis, m_options.maxPktSizeUniDis);
++    return distribution(random::getRandomNumberEngine());
++  }
++  return -1;
++}
++
+ } // namespace server
+ } // namespace ping
+ } // namespace ndn
+diff --git a/tools/ping/server/ping-server.hpp b/tools/ping/server/ping-server.hpp
+index f13769c..ac1275b 100644
+--- a/tools/ping/server/ping-server.hpp
++++ b/tools/ping/server/ping-server.hpp
+@@ -42,6 +42,8 @@ struct Options
+   size_t payloadSize = 0;                   //!< response payload size (0 == no payload)
+   bool wantTimestamp = false;               //!< print timestamp when response sent
+   bool wantQuiet = false;                   //!< suppress printing per-packet log message
++  int minPktSizeUniDis = -1;                //!< minimum packet size for Uniform distribution
++  int maxPktSizeUniDis = -1;                //!< maximum packet size for Uniform distribution
+ };
+
+ /**
+@@ -101,6 +103,13 @@ private:
+   void
+   onInterest(const Interest& interest);
+
++  /**
++   * @brief calculate a random payload size according to the specified probability
++   * distribution (if any). Returns -1 if no distribution was specified.
++   */
++  int
++  calculateRandomPayloadSize();
++
+ private:
+   const Options& m_options;
+   Face& m_face;

@@ -1,0 +1,120 @@
+diff --git a/minindn/apps/nfd.py b/minindn/apps/nfd.py
+index 2b6a959..11a9afa 100644
+--- a/minindn/apps/nfd.py
++++ b/minindn/apps/nfd.py
+@@ -72,4 +72,4 @@ class Nfd(Application):
+ 
+     def start(self):
+         Application.start(self, 'nfd --config {}'.format(self.confFile), logfile=self.logFile)
+-        Minindn.sleep(2)
++        Minindn.sleep(0.1)
+diff --git a/minindn/apps/nlsr.py b/minindn/apps/nlsr.py
+index 280a5a4..a221eb7 100644
+--- a/minindn/apps/nlsr.py
++++ b/minindn/apps/nlsr.py
+@@ -94,7 +94,7 @@ class Nlsr(Application):
+     def start(self):
+         self.createFaces()
+         Application.start(self, 'nlsr -f {}'.format(self.confFile), self.logFile, self.envDict)
+-        Minindn.sleep(1)
++        Minindn.sleep(0.1)
+ 
+     def createFaces(self):
+         for ip in self.neighborIPs:
+diff --git a/minindn/helpers/experiment.py b/minindn/helpers/experiment.py
+index 910b239..0762c8c 100644
+--- a/minindn/helpers/experiment.py
++++ b/minindn/helpers/experiment.py
+@@ -67,15 +67,15 @@ class Experiment(object):
+         return didNlsrConverge
+ 
+     @staticmethod
+-    def setupPing(hosts, strategy):
++    def setupPing(hosts, strategy, options=''):
+         for host in hosts:
+             host.cmd('mkdir -p ping-data')
+             Nfdc.setStrategy(host, '/ndn/', strategy)
+             prefix = getSafeName('/ndn/{}-site/{}'.format(host.name, host.name))
+-            NDNPing.startPingServer(host, prefix)
++            NDNPing.startPingServer(host, prefix, options=options)
+ 
+     @staticmethod
+-    def startPctPings(net, nPings, pctTraffic=1.0):
++    def startPctPings(net, nPings, pctTraffic=1.0, options=''):
+         nNodesToPing = int(round(len(net.hosts) * pctTraffic))
+         info('Each node will ping {} node(s)\n'.format(nNodesToPing))
+         # Temporarily store all the nodes being pinged by a particular node
+@@ -98,7 +98,7 @@ class Experiment(object):
+                 # Do not ping self
+                 if host.name != other.name:
+                     destPrefix = getSafeName('/ndn/{}-site/{}'.format(other.name, other.name))
+-                    NDNPing.ping(host, destPrefix, other.name, nPings)
++                    NDNPing.ping(host, destPrefix, other.name, nPings, options=options)
+                     nodesPingedList.append(other)
+ 
+                 # Always increment because in 100% case a node should not ping itself
+diff --git a/minindn/helpers/ndnping.py b/minindn/helpers/ndnping.py
+index b1a4081..8c5486b 100644
+--- a/minindn/helpers/ndnping.py
++++ b/minindn/helpers/ndnping.py
+@@ -29,11 +29,11 @@ class NDNPing(object):
+     @staticmethod
+     def ping(source, prefix, pingDataFile="output-client", nPings=1, interval=None, timeout=None,
+              starting_seq_num=None, identifier=None, allow_stale_data=False, print_timestamp=True,
+-             sleepTime=0.2):
++             sleepTime=0.2, options=""):
+         print('Scheduling ping(s) from {} for {}'.format(source.name, prefix))
+         # Use '&' to run in background and perform parallel pings
+         source.cmd("mkdir -p ping-data")
+-        source.cmd('ndnping{1}{2}{3}{4}{5}{6}{7} {0} >> ping-data/{8}.txt &'
++        source.cmd('ndnping{1}{2}{3}{4}{5}{6}{7}{8} {0} >> ping-data/{8}.txt &'
+         .format(
+             prefix,
+             ' -c {}'.format(nPings),
+@@ -43,13 +43,14 @@ class NDNPing(object):
+             ' -p {}'.format(identifier) if identifier else '',
+             ' -a' if allow_stale_data else '',
+             ' -t' if print_timestamp else '',
++            ' {}'.format(options) if options else '',
+             pingDataFile
+         ))
+         time.sleep(sleepTime)
+ 
+     @staticmethod
+     def startPingServer(source, prefix, pingDataFile="output-server", freshness=None, satisfy=None,
+-                        size=None, timestamp=False, quiet=False):
++                        size=None, timestamp=False, quiet=False, options=""):
+         """
+         Start a pingserver
+          :param string preifx: prefix to start pingserver on
+@@ -61,13 +62,14 @@ class NDNPing(object):
+         """
+         print('Staring ping server on prefix {}'.format(prefix))
+         source.cmd("mkdir -p ping-data")
+-        cmd = 'ndnpingserver {1}{2}{3}{4}{5} {0}>> ping-data/{6}.txt &'.format(
++        cmd = 'ndnpingserver {1}{2}{3}{4}{5}{6} {0}>> ping-data/{6}.txt &'.format(
+             prefix,
+             '-f {}'.format(freshness) if freshness else '',
+             '-p {}'.format(satisfy) if satisfy else '',
+             '-s {}'.format(size) if size else '',
+             '{}'.format('-t') if timestamp else '',
+             '{}'.format('-q') if quiet else '',
++            ' {}'.format(options) if options else '',
+             pingDataFile
+         )
+-        source.cmd(cmd)
+\ No newline at end of file
++        source.cmd(cmd)
+diff --git a/minindn/helpers/nfdc.py b/minindn/helpers/nfdc.py
+index 1ba926f..33ea147 100644
+--- a/minindn/helpers/nfdc.py
++++ b/minindn/helpers/nfdc.py
+@@ -24,7 +24,7 @@
+ from mininet.log import debug
+ from minindn.minindn import Minindn
+ 
+-SLEEP_TIME = 0.2
++SLEEP_TIME = 0.0
+ 
+ class Nfdc(object):
+     STRATEGY_ASF = 'asf'
