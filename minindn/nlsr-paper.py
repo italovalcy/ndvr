@@ -36,6 +36,10 @@ from minindn.helpers.nfdc import Nfdc
 
 import argparse
 
+def mysleep(duration):
+    info('Sleep for {} seconds\n'.format(duration))
+    time.sleep(duration)
+
 def getParser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-cli', action='store_false', dest='isCliEnabled',
@@ -58,9 +62,9 @@ def mcnFailure(ndn, nfds, nlsrs, args):
     sh('/usr/local/bin/get-cpu-usage.sh ndnping > {}/get-cpu-usage-ndnping 2>&1 & echo $! > {}/get-cpu-usage-ndnping.pid'.format(args.workDir, args.workDir))
     sh('/usr/local/bin/get-cpu-usage.sh ndnpingserver > {}/get-cpu-usage-ndnpingserver 2>&1 & echo $! > {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir, args.workDir))
     sh('top -b -d 1 > {}/top 2>&1 & echo $! > {}/top.pid'.format(args.workDir, args.workDir))
-    time.sleep(args.ctime)
+    mysleep(args.ctime)
 
-    time.sleep(120)
+    mysleep(120)
 
     if args.nPings != 0:
         if args.enableVBR:
@@ -74,29 +78,29 @@ def mcnFailure(ndn, nfds, nlsrs, args):
     if args.enableOnOff:
         nPings = args.nPings
         while nPings >= 60:
-            time.sleep(30)
+            mysleep(30)
             info('Bringing down node {}\n'.format(mcn.name))
             nlsrs[mcn.name].stop()
             nfds[mcn.name].stop()
-            time.sleep(30)
+            mysleep(30)
             info('Bringing up node {}\n'.format(mcn.name))
             nfds[mcn.name].start()
             nlsrs[mcn.name].start()
             nPings = nPings - 60
 
     else:
-        time.sleep(60)
+        mysleep(60)
 
         info('Bringing down node {}\n'.format(mcn.name))
         nlsrs[mcn.name].stop()
         nfds[mcn.name].stop()
 
-        time.sleep(60)
+        mysleep(60)
 
         info('Bringing up node {}\n'.format(mcn.name))
         nfds[mcn.name].start()
         nlsrs[mcn.name].start()
-    time.sleep(60)
+    mysleep(60)
     sh('pkill -F {}/dstat.pid'.format(args.workDir))
     sh('pkill -F {}/get-cpu-usage-nlsr.pid'.format(args.workDir))
     sh('pkill -F {}/get-cpu-usage-ndnping.pid'.format(args.workDir))

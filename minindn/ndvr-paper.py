@@ -36,7 +36,9 @@ from minindn.helpers.nfdc import Nfdc
 
 import argparse
 
-DEFAULT_TOPO = '/home/minindn/mini-ndn/examples/topo-two-nodes.conf'
+def mysleep(duration):
+    info('Sleep for {} seconds\n'.format(duration))
+    time.sleep(duration)
 
 def getParser():
     parser = argparse.ArgumentParser()
@@ -62,9 +64,9 @@ def mcnFailure(ndn, nfds, ndvrs, args):
     sh('/usr/local/bin/get-cpu-usage.sh ndnping > {}/get-cpu-usage-ndnping 2>&1 & echo $! > {}/get-cpu-usage-ndnping.pid'.format(args.workDir, args.workDir))
     sh('/usr/local/bin/get-cpu-usage.sh ndnpingserver > {}/get-cpu-usage-ndnpingserver 2>&1 & echo $! > {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir, args.workDir))
     sh('top -b -d 1 > {}/top 2>&1 & echo $! > {}/top.pid'.format(args.workDir, args.workDir))
-    time.sleep(args.ctime)
+    mysleep(args.ctime)
 
-    time.sleep(120)
+    mysleep(120)
 
     if args.nPings != 0:
         if args.enableVBR:
@@ -78,30 +80,30 @@ def mcnFailure(ndn, nfds, ndvrs, args):
     if args.enableOnOff:
         nPings = args.nPings
         while nPings >= 60:
-            time.sleep(30)
+            mysleep(30)
             info('Bringing down node {}\n'.format(mcn.name))
             ndvrs[mcn.name].stop()
             nfds[mcn.name].stop()
-            time.sleep(30)
+            mysleep(30)
             info('Bringing up node {}\n'.format(mcn.name))
             nfds[mcn.name].start()
             ndvrs[mcn.name].start()
             nPings = nPings - 60
 
     else:
-        time.sleep(60)
+        mysleep(60)
 
         info('Bringing down node {}\n'.format(mcn.name))
         ndvrs[mcn.name].stop()
         nfds[mcn.name].stop()
 
-        time.sleep(60)
+        mysleep(60)
 
         info('Bringing up node {}\n'.format(mcn.name))
         nfds[mcn.name].start()
         ndvrs[mcn.name].start()
 
-    time.sleep(60)
+    mysleep(60)
     sh('pkill -F {}/dstat.pid'.format(args.workDir))
     sh('pkill -F {}/get-cpu-usage-ndvrd.pid'.format(args.workDir))
     sh('pkill -F {}/get-cpu-usage-ndnping.pid'.format(args.workDir))
