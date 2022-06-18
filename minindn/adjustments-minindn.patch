@@ -62,7 +62,7 @@ index b1a4081..8c5486b 100644
      def ping(source, prefix, pingDataFile="output-client", nPings=1, interval=None, timeout=None,
               starting_seq_num=None, identifier=None, allow_stale_data=False, print_timestamp=True,
 -             sleepTime=0.2):
-+             sleepTime=0.2, options=""):
++             sleepTime=0.0, options=""):
          print('Scheduling ping(s) from {} for {}'.format(source.name, prefix))
          # Use '&' to run in background and perform parallel pings
          source.cmd("mkdir -p ping-data")
@@ -92,7 +92,7 @@ index b1a4081..8c5486b 100644
          print('Staring ping server on prefix {}'.format(prefix))
          source.cmd("mkdir -p ping-data")
 -        cmd = 'ndnpingserver {1}{2}{3}{4}{5} {0}>> ping-data/{6}.txt &'.format(
-+        cmd = 'ndnpingserver {1}{2}{3}{4}{5}{6} {0}>> ping-data/{6}.txt &'.format(
++        cmd = 'ndnpingserver {1}{2}{3}{4}{5}{6} {0}>> ping-data/{7}.txt &'.format(
              prefix,
              '-f {}'.format(freshness) if freshness else '',
              '-p {}'.format(satisfy) if satisfy else '',
