@@ -33,9 +33,24 @@ from minindn.apps.nfd import Nfd
 from minindn.apps.nlsr import Nlsr
 from minindn.helpers.experiment import Experiment
 from minindn.helpers.nfdc import Nfdc
-from minindn.helpers.ndnpingclient import NDNPingClient
 
-from nlsr_common import getParser
+import argparse
+
+def getParser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--no-cli', action='store_false', dest='isCliEnabled',
+                        help='Run experiments and exit without showing the command line interface')
+    parser.add_argument('--nPings', type=int, default=120,
+                        help='Number of pings to perform between each node in the experiment')
+    parser.add_argument('--ctime', type=int, default=60,
+                        help='Specify convergence time for the topology (Default: 60 seconds)')
+    parser.add_argument('--pct-traffic', dest='pctTraffic', type=float, default=1.0,
+                        help='Specify the percentage of nodes each node should ping')
+    parser.add_argument('--vbr', action='store_true', dest='enableVBR',
+                        help='Run ping with Variable Bit Rate traffic model')
+    parser.add_argument('--onoff', action='store_true', dest='enableOnOff',
+                        help='Enable On/Off failure model for the most connected node')
+    return parser
 
 def mcnFailure(ndn, nfds, nlsrs, args):
     sh('dstat --epoch --cpu --mem > {}/dstat 2>&1 & echo $! > {}/dstat.pid'.format(args.workDir, args.workDir))
@@ -93,13 +108,7 @@ if __name__ == '__main__':
     setLogLevel('info')
     lg.ch.formatter = logging.Formatter('%(asctime)s - %(message)s')
 
-    myparser = getParser()
-    myparser.add_argument('--vbr', action='store_true', dest='enableVBR',
-                        help='Run ping with Variable Bit Rate traffic model')
-    myparser.add_argument('--onoff', action='store_true', dest='enableOnOff',
-                        help='Enable On/Off failure model for the most connected node')
-
-    ndn = Minindn(parser=myparser)
+    ndn = Minindn(parser=getParser())
     args = ndn.args
 
     ndn.start()
@@ -107,11 +116,7 @@ if __name__ == '__main__':
     info('Starting nfd\n')
     nfds = AppManager(ndn, ndn.net.hosts, Nfd, logLevel='DEBUG')
     info('Starting nlsr\n')
-    nlsrs = AppManager(ndn, ndn.net.hosts, Nlsr, sync=args.sync,
-                       security=args.security, faceType=args.faceType,
-                       nFaces=args.faces, routingType=args.routingType,
-                       logLevel='ndn.*=DEBUG:nlsr.*=DEBUG')
-                       #logLevel='NONE')
+    nlsrs = AppManager(ndn, ndn.net.hosts, Nlsr, logLevel='ndn.*=DEBUG:nlsr.*=DEBUG')
 
     info('Starting mcnFailure()\n')
     mcnFailure(ndn, nfds, nlsrs, args)
