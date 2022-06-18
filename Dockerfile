@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cp minindn/topologies/* /mini-ndn/topologies/ && \
     cp minindn/get-cpu-usage.sh /usr/local/bin/ && \
     cd ../ && patch -p1 < ndvr/minindn/adjustments-minindn.patch && \
+    git clone --branch ndn-tools-22.02 https://github.com/named-data/ndn-tools && \
+    cd ndn-tools && patch -p1 < ../ndvr/minindn/ndn-tools-22.02-ndn-ping-variable-bit-rate.patch && \
+    ./waf configure --prefix=/usr && ./waf && ./waf install && cd ../ && \
     rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
