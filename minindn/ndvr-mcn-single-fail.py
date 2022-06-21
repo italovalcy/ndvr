@@ -22,7 +22,7 @@
 # If not, see <http://www.gnu.org/licenses/>.
 
 import time
-from datetime.datetime import now
+from datetime import datetime
 
 from mininet.log import lg, setLogLevel, info
 import logging
@@ -67,16 +67,16 @@ def mcnFailure(ndn, nfds, ndvrs, args):
         options_pingserver = '--size 800'
         options_pingclient = None
 
-    info('{} Starting ndnpingserver\n'.format(now().strftime("%s.%f")))
+    info('{} Starting ndnpingserver\n'.format(datetime.now().strftime("%s.%f")))
     Experiment.setupPing(ndn.net.hosts, Nfdc.STRATEGY_BEST_ROUTE, options=options_pingserver)
-    info('{} Starting ndnpingclient\n'.format(now().strftime("%s.%f")))
+    info('{} Starting ndnpingclient\n'.format(datetime.now().strftime("%s.%f")))
     pingedDict = Experiment.startPctPings(ndn.net, args.nPings, args.pctTraffic, options=options_pingclient)
 
     mcn = max(ndn.net.hosts, key=lambda host: len(host.intfNames()))
 
     mysleep(30)
 
-    info('{} Bringing down node {}\n'.format(now().strftime("%s.%f"), mcn.name))
+    info('{} Bringing down node {}\n'.format(datetime.now().strftime("%s.%f"), mcn.name))
     for i in mcn.intfs:
         mcn.intfs[i].link.intf1.config(loss=100.0)
         mcn.intfs[i].link.intf2.config(loss=100.0)
@@ -86,7 +86,7 @@ def mcnFailure(ndn, nfds, ndvrs, args):
 
     mysleep(30)
 
-    info('{} Bringing up node {}\n'.format(now().strftime("%s.%f"), mcn.name))
+    info('{} Bringing up node {}\n'.format(datetime.now().strftime("%s.%f"), mcn.name))
     for i in mcn.intfs:
         mcn.intfs[i].link.intf1.config(loss=0.000001)
         mcn.intfs[i].link.intf2.config(loss=0.000001)
