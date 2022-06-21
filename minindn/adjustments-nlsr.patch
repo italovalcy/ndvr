@@ -1,0 +1,22 @@
+diff --git a/src/conf-parameter.hpp b/src/conf-parameter.hpp
+index 57dd2c2..ded330e 100644
+--- a/src/conf-parameter.hpp
++++ b/src/conf-parameter.hpp
+@@ -54,7 +54,7 @@ enum {
+ };
+ 
+ enum {
+-  ADJ_LSA_BUILD_INTERVAL_MIN = 5,
++  ADJ_LSA_BUILD_INTERVAL_MIN = 1,
+   ADJ_LSA_BUILD_INTERVAL_DEFAULT = 10,
+   ADJ_LSA_BUILD_INTERVAL_MAX = 30
+ };
+@@ -91,7 +91,7 @@ enum {
+ };
+ 
+ enum {
+-  HELLO_INTERVAL_MIN = 30,
++  HELLO_INTERVAL_MIN = 1,
+   HELLO_INTERVAL_DEFAULT = 60,
+   HELLO_INTERVAL_MAX =90
+ };

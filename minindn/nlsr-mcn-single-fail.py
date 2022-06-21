@@ -22,6 +22,7 @@
 # If not, see <http://www.gnu.org/licenses/>.
 
 import time
+from datetime.datetime import now
 
 from mininet.log import lg, setLogLevel, info
 import logging
@@ -42,6 +43,8 @@ def mysleep(duration):
 
 def getParser():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--interval', type=int, default=None,
+                        help='NDVR Hello Interval')
     parser.add_argument('--no-cli', action='store_false', dest='isCliEnabled',
                         help='Run experiments and exit without showing the command line interface')
     parser.add_argument('--nPings', type=int, default=120,
@@ -52,75 +55,53 @@ def getParser():
                         help='Specify the percentage of nodes each node should ping')
     parser.add_argument('--vbr', action='store_true', dest='enableVBR',
                         help='Run ping with Variable Bit Rate traffic model')
-    parser.add_argument('--onoff', action='store_true', dest='enableOnOff',
-                        help='Enable On/Off failure model for the most connected node')
     return parser
 
 def mcnFailure(ndn, nfds, nlsrs, args):
-    sh('dstat --epoch --cpu --mem > {}/dstat 2>&1 & echo $! > {}/dstat.pid'.format(args.workDir, args.workDir))
-    sh('/usr/local/bin/get-cpu-usage.sh nlsr > {}/get-cpu-usage-nlsr 2>&1 & echo $! > {}/get-cpu-usage-nlsr.pid'.format(args.workDir, args.workDir))
-    sh('/usr/local/bin/get-cpu-usage.sh ndnping > {}/get-cpu-usage-ndnping 2>&1 & echo $! > {}/get-cpu-usage-ndnping.pid'.format(args.workDir, args.workDir))
-    sh('/usr/local/bin/get-cpu-usage.sh ndnpingserver > {}/get-cpu-usage-ndnpingserver 2>&1 & echo $! > {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir, args.workDir))
-    sh('top -b -d 1 > {}/top 2>&1 & echo $! > {}/top.pid'.format(args.workDir, args.workDir))
     mysleep(args.ctime)
 
-    mysleep(120)
+    if args.enableVBR:
+        options_pingserver = '--udist-size 400,1200'
+        options_pingclient = '--poisson-interval 1000'
+    else:
+        options_pingserver = '--size 800'
+        options_pingclient = None
 
-    if args.nPings != 0:
-        if args.enableVBR:
-            Experiment.setupPing(ndn.net.hosts, Nfdc.STRATEGY_BEST_ROUTE, options='--udist-size 400,1200')
-            pingedDict = Experiment.startPctPings(ndn.net, args.nPings, args.pctTraffic, options='--poisson-interval 1000')
-        else:
-            Experiment.setupPing(ndn.net.hosts, Nfdc.STRATEGY_BEST_ROUTE, options='--size 800')
-            pingedDict = Experiment.startPctPings(ndn.net, args.nPings, args.pctTraffic)
+    info('{} Starting ndnpingserver\n'.format(now().strftime("%s.%f")))
+    Experiment.setupPing(ndn.net.hosts, Nfdc.STRATEGY_BEST_ROUTE, options=options_pingserver)
+    info('{} Starting ndnpingclient\n'.format(now().strftime("%s.%f")))
+    pingedDict = Experiment.startPctPings(ndn.net, args.nPings, args.pctTraffic, options=options_pingclient)
 
     mcn = max(ndn.net.hosts, key=lambda host: len(host.intfNames()))
-    if args.enableOnOff:
-        nPings = args.nPings
-        while nPings >= 60:
-            mysleep(30)
-            info('Bringing down node {}\n'.format(mcn.name))
-            nlsrs[mcn.name].stop()
-            nfds[mcn.name].stop()
-            mysleep(30)
-            info('Bringing up node {}\n'.format(mcn.name))
-            nfds[mcn.name].start()
-            nlsrs[mcn.name].start()
-            nPings = nPings - 60
 
-    else:
-        mysleep(60)
+    mysleep(30)
 
-        info('Bringing down node {}\n'.format(mcn.name))
-        for i in mcn.intfs:
-            mcn.intfs[i].link.intf1.config(loss=100.0)
-            mcn.intfs[i].link.intf2.config(loss=100.0)
-        #nlsrs[mcn.name].stop()
-        #nfds[mcn.name].stop()
+    info('{} Bringing down node {}\n'.format(now().strftime("%s.%f"), mcn.name))
+    for i in mcn.intfs:
+        mcn.intfs[i].link.intf1.config(loss=100.0)
+        mcn.intfs[i].link.intf2.config(loss=100.0)
+        #mcn.cmd("ip link set down %s" % mcn.intfs[intf].name)
+    #nlsrs[mcn.name].stop()
+    #nfds[mcn.name].stop()
 
-        mysleep(60)
+    mysleep(30)
 
-        info('Bringing up node {}\n'.format(mcn.name))
-        for i in mcn.intfs:
-            mcn.intfs[i].link.intf1.config(loss=0.000001)
-            mcn.intfs[i].link.intf2.config(loss=0.000001)
-        #nfds[mcn.name].start()
-        #nlsrs[mcn.name].start()
+    info('{} Bringing up node {}\n'.format(now().strftime("%s.%f"), mcn.name))
+    for i in mcn.intfs:
+        mcn.intfs[i].link.intf1.config(loss=0.000001)
+        mcn.intfs[i].link.intf2.config(loss=0.000001)
+        #mcn.cmd("ip link set up %s" % mcn.intfs[intf].name)
+    #nfds[mcn.name].start()
+    #nlsrs[mcn.name].start()
+
     mysleep(60)
-    sh('pkill -F {}/dstat.pid'.format(args.workDir))
-    sh('pkill -F {}/get-cpu-usage-nlsr.pid'.format(args.workDir))
-    sh('pkill -F {}/get-cpu-usage-ndnping.pid'.format(args.workDir))
-    sh('pkill -F {}/get-cpu-usage-ndnpingserver.pid'.format(args.workDir))
-    sh('pkill -F {}/top.pid'.format(args.workDir))
-
 
 if __name__ == '__main__':
     setLogLevel('info')
-    lg.ch.formatter = logging.Formatter('%(asctime)s - %(message)s')
-
     ndn = Minindn(parser=getParser())
     args = ndn.args
 
+    info('Starting Minindn\n')
     ndn.start()
 
     info('Starting nfd\n')

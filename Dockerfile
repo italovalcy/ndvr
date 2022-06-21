@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates sudo curl mawk dstat procps && \
+    git ca-certificates sudo curl mawk dstat procps libchronosync-dev libpsync-dev && \
     update-ca-certificates && \
     alias python=python3 && \
     git clone https://github.com/named-data/mini-ndn.git && \
@@ -22,7 +22,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cd ../ && patch -p1 < ndvr/minindn/adjustments-minindn.patch && \
     git clone --branch ndn-tools-22.02 https://github.com/named-data/ndn-tools && \
     cd ndn-tools && patch -p1 < ../ndvr/minindn/ndn-tools-22.02-ndn-ping-variable-bit-rate.patch && \
-    ./waf configure --prefix=/usr && ./waf && ./waf install && cd ../ && \
+    ./waf configure --prefix=/usr && ./waf install && \
+    cd ../ && rm -rf ndn-tools && \
+    git clone https://github.com/named-data/NLSR && cd NLSR && \
+    git checkout a3a63975d13bcdf3a6851dcd8f9413049fb62c7d && \
+    patch -p1 < ../ndvr/minindn/adjustments-nlrs.patch && \
+    ./waf configure --bindir=/usr/bin --sysconfdir=/etc && ./waf install && \
+    cd .. && rm -rf NLSR && \
+    cp ndvr/minindn/nlsr.conf.sample-int1 /etc/ndn/nlsr.conf.sample-int1 && \
+    mv /etc/ndn/nlsr.conf.sample /etc/ndn/nlsr.conf.sample-orig && \
+    ln -s /etc/ndn/nlsr.conf.sample-int1 /etc/ndn/nlsr.conf.sample && \
     rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
