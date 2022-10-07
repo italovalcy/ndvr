@@ -1,0 +1,8 @@
+mini-ndn> net
+a a-eth0:b-eth0 a-eth1:d-eth1
+b b-eth0:a-eth0 b-eth1:c-eth0 b-eth2:e-eth2
+c c-eth0:b-eth1 c-eth1:f-eth1
+d d-eth0:e-eth0 d-eth1:a-eth1
+e e-eth0:d-eth0 e-eth1:f-eth0 e-eth2:b-eth2
+f f-eth0:e-eth1 f-eth1:c-eth1
+c0

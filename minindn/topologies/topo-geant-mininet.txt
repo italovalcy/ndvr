@@ -1,0 +1,48 @@
+mini-ndn> net
+ams ams-eth0:ham-eth2 ams-eth1:lon-eth0 ams-eth2:bru-eth1 ams-eth3:fra-eth1
+ath ath-eth0:nic-eth1 ath-eth1:mil-eth5 ath-eth2:the-eth0
+bel bel-eth0:sof-eth4 bel-eth1:pod-eth0 bel-eth2:zag-eth0
+ber ber-eth0:var-eth1 ber-eth1:cop-eth3 ber-eth2:ham-eth0
+bil bil-eth0:mad-eth1 bil-eth1:par-eth4 bil-eth2:por-eth0
+bra bra-eth0:bud-eth1 bra-eth1:vie-eth0
+bru bru-eth0:par-eth2 bru-eth1:ams-eth2 bru-eth2:lux-eth0
+buc buc-eth0:chi-eth1 buc-eth1:bud-eth0 buc-eth2:sof-eth3
+bud bud-eth0:buc-eth1 bud-eth1:bra-eth0 bud-eth2:zag-eth2
+chi chi-eth0:kie-eth1 chi-eth1:buc-eth0
+cop cop-eth0:rey-eth0 cop-eth1:osl-eth0 cop-eth2:hel-eth1 cop-eth3:ber-eth1 cop-eth4:ham-eth1
+dub dub-eth0:lon-eth1 dub-eth1:par-eth0
+fra fra-eth0:lux-eth1 fra-eth1:ams-eth3 fra-eth2:pra-eth0 fra-eth3:gen-eth1
+gen gen-eth0:par-eth3 gen-eth1:fra-eth3 gen-eth2:mil-eth1 gen-eth3:mar-eth5
+ham ham-eth0:ber-eth2 ham-eth1:cop-eth4 ham-eth2:ams-eth0
+hel hel-eth0:sto-eth1 hel-eth1:cop-eth2 hel-eth2:tal-eth0
+ist ist-eth0:the-eth2 ist-eth1:sof-eth2
+kie kie-eth0:var-eth3 kie-eth1:chi-eth0
+lis lis-eth0:por-eth1 lis-eth1:sin-eth0 lis-eth2:mad-eth2
+lon lon-eth0:ams-eth1 lon-eth1:dub-eth0 lon-eth2:par-eth1
+luj luj-eth0:zag-eth1 luj-eth1:mil-eth7
+lux lux-eth0:bru-eth2 lux-eth1:fra-eth0
+mad mad-eth0:mar-eth1 mad-eth1:bil-eth0 mad-eth2:lis-eth2
+mar mar-eth0:mil-eth2 mar-eth1:mad-eth0 mar-eth2:tel-eth0 mar-eth3:nic-eth0 mar-eth4:val-eth0 mar-eth5:gen-eth3
+mil mil-eth0:vie-eth2 mil-eth1:gen-eth2 mil-eth2:mar-eth0 mil-eth3:val-eth1 mil-eth4:tel-eth1 mil-eth5:ath-eth1 mil-eth6:tir-eth0 mil-eth7:luj-eth1
+nic nic-eth0:mar-eth3 nic-eth1:ath-eth0
+osl osl-eth0:cop-eth1 osl-eth1:sto-eth0
+par par-eth0:dub-eth1 par-eth1:lon-eth2 par-eth2:bru-eth0 par-eth3:gen-eth0 par-eth4:bil-eth1
+pod pod-eth0:bel-eth1 pod-eth1:tir-eth2
+por por-eth0:bil-eth2 por-eth1:lis-eth0
+pra pra-eth0:fra-eth2 pra-eth1:var-eth2 pra-eth2:vie-eth1
+rey rey-eth0:cop-eth0
+rig rig-eth0:tal-eth1 rig-eth1:vil-eth0
+sin sin-eth0:lis-eth1
+sko sko-eth0:the-eth4 sko-eth1:sof-eth1
+sof sof-eth0:the-eth3 sof-eth1:sko-eth1 sof-eth2:ist-eth1 sof-eth3:buc-eth2 sof-eth4:bel-eth0
+sto sto-eth0:osl-eth1 sto-eth1:hel-eth0
+tal tal-eth0:hel-eth2 tal-eth1:rig-eth0
+tel tel-eth0:mar-eth2 tel-eth1:mil-eth4
+the the-eth0:ath-eth2 the-eth1:tir-eth1 the-eth2:ist-eth0 the-eth3:sof-eth0 the-eth4:sko-eth0
+tir tir-eth0:mil-eth6 tir-eth1:the-eth1 tir-eth2:pod-eth1
+val val-eth0:mar-eth4 val-eth1:mil-eth3
+var var-eth0:vil-eth1 var-eth1:ber-eth0 var-eth2:pra-eth1 var-eth3:kie-eth0
+vie vie-eth0:bra-eth1 vie-eth1:pra-eth2 vie-eth2:mil-eth0
+vil vil-eth0:rig-eth1 vil-eth1:var-eth0
+zag zag-eth0:bel-eth2 zag-eth1:luj-eth0 zag-eth2:bud-eth2
+c0
