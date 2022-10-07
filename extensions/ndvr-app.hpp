@@ -29,7 +29,7 @@ public:
       .AddConstructor<NdvrApp>()
       .AddAttribute("Network", "Name of the network the router belongs to in ndn URI format", StringValue("/ndn"),
                     ndn::MakeNameAccessor(&NdvrApp::network_), ndn::MakeNameChecker())
-      .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/\%C1.Router/router1"),
+      .AddAttribute("RouterName", "Name of the router in ndn URI format", StringValue("/%C1.Router/router1"),
                     ndn::MakeNameAccessor(&NdvrApp::routerName_), ndn::MakeNameChecker())
       .AddAttribute("ValidationConfig", "Secutiry Validation config file", StringValue("config/validation.conf"),
                     MakeStringAccessor(&NdvrApp::validationConfig_), MakeStringChecker())

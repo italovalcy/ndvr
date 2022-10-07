@@ -11,7 +11,10 @@ inline void EncodeDvInfo(RoutingTable& v, proto::DvInfo* dvinfo_proto) {
     auto* entry = dvinfo_proto->add_entry();
     entry->set_prefix(it->first);
     entry->set_seq(it->second.GetSeqNum());
-    entry->set_cost(it->second.GetCost());
+    entry->set_cost(it->second.GetBestCost());
+    entry->set_originator(it->second.GetOriginator());
+    entry->set_bestnexthop(it->second.GetLearnedFrom());
+    entry->set_sec_cost(it->second.GetSecondBestCost());
   }
 }
 
@@ -28,7 +31,10 @@ inline RoutingTable DecodeDvInfo(const proto::DvInfo& dvinfo_proto) {
     auto prefix = entry.prefix();
     auto seq = entry.seq();
     auto cost = entry.cost();
-    RoutingEntry re = RoutingEntry(prefix, seq, cost);
+    auto originator = entry.originator();
+    auto bestnexthop = entry.bestnexthop();
+    auto sec_cost = entry.sec_cost();
+    RoutingEntry re = RoutingEntry(prefix, originator, seq, cost, bestnexthop, sec_cost);
     dvinfo.emplace(prefix, re);
   }
   return dvinfo;

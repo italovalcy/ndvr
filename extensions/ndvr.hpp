@@ -18,6 +18,8 @@
 #include <ndn-cxx/security/validator-config.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
 #include <ndn-cxx/util/time.hpp>
+#include <ndn-cxx/mgmt/nfd/face-event-notification.hpp>
+#include <ndn-cxx/mgmt/nfd/face-monitor.hpp>
 
 #include "routing-table.hpp"
 #include "ndvr-message.pb.h"
@@ -29,7 +31,7 @@ namespace ndvr {
 static const Name kNdvrPrefix = Name("/localhop/ndvr");
 static const Name kNdvrHelloPrefix = Name("/localhop/ndvr/dvannc");
 static const Name kNdvrDvInfoPrefix = Name("/localhop/ndvr/dvinfo");
-static const std::string kRouterTag = "\%C1.Router";
+static const std::string kRouterTag = "%C1.Router";
 
 
 class NeighborEntry {
@@ -104,7 +106,7 @@ private:
 class Ndvr
 {
 public:
-  Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np, std::vector<std::string>& faces, std::string validationConfig);
+  Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& np, std::vector<std::string>& faces, std::vector<std::string>& monitorFaces, std::string validationConfig);
   void run();
   void cleanup();
   void Start();
@@ -158,6 +160,7 @@ private:
   uint64_t CreateUnicastFace(std::string mac);
   std::string GetNeighborToken();
   void UpdateRoutingTableDigest();
+  void onFaceEventNotification(const ndn::nfd::FaceEventNotification& faceEventNotification);
 
   void
   buildRouterPrefix()
@@ -249,6 +252,7 @@ private:
   Name m_network;
   Name m_routerName;
   std::vector<std::string> m_listenFaces;
+  std::vector<std::string> m_facesToBeMonitored;
 
   ndn::KeyChain m_keyChain;
   Name m_routerPrefix;
@@ -290,6 +294,10 @@ private:
   /* m_pivot (int) - iteractor for the circular list of neighbors
    * which points to the next neighbors with priority to get DvInfo */
   NeighborMap::iterator m_pivot;
+
+  /* m_faceMonitor - monitor /localhost/nfd/faces/events through nfd
+   * API - which leverage CallBacks to make NDVR aware of events */
+  ndn::nfd::FaceMonitor m_faceMonitor;
 };
 
 } // namespace ndvr

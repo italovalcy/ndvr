@@ -48,22 +48,24 @@ class Ndvr(Application):
         self.createKeysAndCertificates()
 
     def start(self):
-        faces = self.listEthernetMulticastFaces()
-        Application.start(self, '{} -n {} -r {} {} -v {} -f {} -p {}'.format(Ndvr.BIN 
+        monitorFace = "ether://[01:00:5e:00:17:aa]"
+        faces = self.listEthernetMulticastFaces(monitorFace)
+        Application.start(self, '{} -n {} -r {} {} -v {} -f {} -m {} -p {}'.format(Ndvr.BIN 
                                     , self.network
                                     , self.routerName
                                     , '-i {}'.format(self.interval) if self.interval else '' 
                                     , self.validationConfFile
                                     , ' -f '.join(faces)
+                                    , monitorFace
                                     , ' -p '.join(self.prefixes)
                                     ), 
                             self.logFile, 
                             self.envDict)
         Minindn.sleep(0.1)
 
-    def listEthernetMulticastFaces(self):
+    def listEthernetMulticastFaces(self, monitorFace):
         faces = []
-        cmd = 'nfdc face list remote ether://[01:00:5e:00:17:aa]'
+        cmd = 'nfdc face list remote {}'.format(monitorFace)
         output = self.node.cmd(cmd)
         for line in output.split("\n"):
             m = re.search('^faceid=([0-9]+)', line)

@@ -27,7 +27,7 @@ public:
     }
   };
 
-  NdvrRunner(std::string& networkName, std::string& routerName, int helloInterval, std::string& validationConfig, std::vector<std::string>& namePrefixes, std::vector<std::string>& faces);
+  NdvrRunner(std::string& networkName, std::string& routerName, int helloInterval, std::string& validationConfig, std::vector<std::string>& namePrefixes, std::vector<std::string>& faces, std::vector<std::string>& monitorFaces);
 
   void
   run();

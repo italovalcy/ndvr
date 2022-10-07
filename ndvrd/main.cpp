@@ -11,10 +11,11 @@ int main(int32_t argc, char** argv)
   int helloInterval = 0;
   std::string validationConfig;
   std::vector<std::string> namePrefixes;
-  std::vector<std::string> faces;
+  std::vector<std::string> faces;  // faces we will be listen (existing faceId or localUri to be created)
+  std::vector<std::string> monitorFaces;  // list of face URIs we will monitor for nfd/faces/events
 
   int32_t opt;
-  while ((opt = getopt(argc, argv, "dv:c:n:r:i:p:f:h")) != -1) {
+  while ((opt = getopt(argc, argv, "dv:c:n:r:i:p:f:m:h")) != -1) {
     switch (opt) {
       case 'v':
         validationConfig = optarg;
@@ -33,6 +34,9 @@ int main(int32_t argc, char** argv)
         break;
       case 'f':
         faces.push_back(optarg);
+        break;
+      case 'm':
+        monitorFaces.push_back(optarg);
         break;
       case 'h':
       default:
@@ -61,7 +65,7 @@ int main(int32_t argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  ndn::ndvr::NdvrRunner runner(networkName, routerName, helloInterval, validationConfig, namePrefixes, faces);
+  ndn::ndvr::NdvrRunner runner(networkName, routerName, helloInterval, validationConfig, namePrefixes, faces, monitorFaces);
 
   try {
     runner.run();

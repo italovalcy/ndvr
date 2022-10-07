@@ -38,13 +38,17 @@ void update_curtime() {
   NS_LOG ("DEBUG", msg)
 #define NS_LOG_INFO(msg) \
   NS_LOG ("INFO", msg)
+#define NS_LOG_WARN(msg) \
+  NS_LOG ("WARN", msg)
+#define NS_LOG_ERROR(msg) \
+  NS_LOG ("ERROR", msg)
 
 #endif
 
 namespace ndn {
 namespace ndvr {
 
-Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv, std::vector<std::string>& faces, std::string validationConfig)
+Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name routerName, std::vector<std::string>& npv, std::vector<std::string>& faces, std::vector<std::string>& monitorFaces, std::string validationConfig)
   : m_signingInfo(signingInfo)
   , m_scheduler(m_face.getIoService())
   , m_validator(m_face)
@@ -54,6 +58,7 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   , m_network(network)
   , m_routerName(routerName)
   , m_listenFaces(faces)
+  , m_facesToBeMonitored(monitorFaces)
   , m_routingTable(m_face, m_keyChain)
   , m_helloIntervalIni(1)
   , m_helloIntervalCur(1)
@@ -63,6 +68,7 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
   , m_localRTTimeout(1)
   , m_rengine(rdevice_())
   , m_pivot(m_neighMap.end())
+  , m_faceMonitor(m_face)
 {
   buildRouterPrefix();
 
@@ -77,8 +83,9 @@ Ndvr::Ndvr(const ndn::security::SigningInfo& signingInfo, Name network, Name rou
     RoutingEntry routingEntry;
     routingEntry.SetName(*it);
     routingEntry.SetSeqNum(2);
-    routingEntry.SetCost(0);
-    routingEntry.SetFaceId(0); /* directly connected */
+    routingEntry.UpsertNextHop(0, 0, "");  /* directly connected */
+    //routingEntry.SetFaceId(0); /* directly connected */
+    routingEntry.SetOriginator(m_routerPrefix.toUri()); /* directly connected */
     m_routingTable.insert(routingEntry);
   }
 
@@ -105,6 +112,9 @@ void Ndvr::Start() {
   });
 
   registerPrefixes();
+
+  m_faceMonitor.onNotification.connect(std::bind(&Ndvr::onFaceEventNotification, this, _1));
+  m_faceMonitor.start();
 
   SendHelloInterest();
 }
@@ -184,6 +194,55 @@ Ndvr::registerPrefixes() {
 //    }
 //  }
 //
+}
+
+void
+Ndvr::onFaceEventNotification(const ndn::nfd::FaceEventNotification& faceEventNotification)
+{
+  NS_LOG_DEBUG("onFaceEventNotification called with "
+     << "FaceEvent(Kind=" << faceEventNotification.getKind()
+     << ", FaceId=" << faceEventNotification.getFaceId()
+     << ", RemoteUri=" << faceEventNotification.getRemoteUri()
+     << ", LocalUri=" << faceEventNotification.getLocalUri()
+     << ")"
+  )
+
+  switch (faceEventNotification.getKind()) {
+    case ndn::nfd::FACE_EVENT_DOWN:
+    case ndn::nfd::FACE_EVENT_DESTROYED: {
+      uint64_t faceId = faceEventNotification.getFaceId();
+      
+      for (auto it = m_neighMap.begin(); it != m_neighMap.end(); ++it) {
+        if (it->second.GetFaceId() == faceId) {
+          it->second.removal_event.cancel();
+          RemoveNeighbor(it->second.GetName());
+          break;
+        }
+      }
+      break;
+    }
+    case ndn::nfd::FACE_EVENT_CREATED: {
+      std::string faceUri;
+      try {
+        faceUri = faceEventNotification.getRemoteUri();
+      }
+      catch (const std::exception& e) {
+        NS_LOG_WARN(e.what());
+        return;
+      }
+      uint64_t faceId = faceEventNotification.getFaceId();
+      auto foundFaceUri = std::find(m_facesToBeMonitored.begin(), m_facesToBeMonitored.end(), faceUri);
+      if (foundFaceUri != m_facesToBeMonitored.end() && faceId != 0) {
+        NS_LOG_DEBUG("Face creation event matches facesMonitor: " << faceUri
+                        << ". New Face ID: " << faceEventNotification.getFaceId() << ". Registering NDVR prefixes.");
+        m_routingTable.registerPrefix(kNdvrHelloPrefix.toUri(), faceId, 0);
+        m_routingTable.registerPrefix(kNdvrDvInfoPrefix.toUri(), faceId, 0);
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 std::string
@@ -306,8 +365,9 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
   // remove all routes whose next-hop is this neighbor (instead of remove, we increase the cost)
   for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
     if (it->second.isNextHop(neigh_it->second.GetFaceId())) {
-      it->second.SetCost(neigh_it->second.GetFaceId(),
+      it->second.SetNextHopCost(neigh_it->second.GetFaceId(),
           std::numeric_limits<uint32_t>::max());
+      m_routingTable.unregisterPrefix(it->first, neigh_it->second.GetFaceId());
       it->second.IncSeqNum(1);
       has_changed = true;
     }
@@ -316,6 +376,10 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
       it->second.IncSeqNum(2);
       has_changed = true;
     }
+    // Now that we removed a NextHop, we eventually need to update the
+    // learnedFrom attribute to avoid local loops
+    //if (it->second.GetNextHopsSize() == 1)
+    //  it->second.SetLearnedFrom(it->second.GetNextHopName(it->second.GetBestFaceId()));
   }
 
   // remove from neighbor map
@@ -330,6 +394,11 @@ Ndvr::RemoveNeighbor(const std::string neigh) {
   //  /* schedule a immediate ehlo message to notify neighbors about a new DvInfo */
   //  ResetHelloInterval();
     SendHelloInterest();
+  }
+  // TODO: list my RIB
+  NS_LOG_DEBUG("m_routingTable (one rib-entry per line)");
+  for (auto it = m_routingTable.begin(); it != m_routingTable.end(); ++it) {
+    NS_LOG_DEBUG("rib-entry: " << it->first << " seq=" << it->second.GetSeqNum() << " nexhops={" << it->second.getNextHopsStr() << "} bestnexthop=" << it->second.GetLearnedFrom());
   }
 }
 
@@ -730,7 +799,10 @@ void Ndvr::EncodeDvInfo(std::string& out) {
     auto* entry = dvinfo_proto.add_entry();
     entry->set_prefix(it->first);
     entry->set_seq(it->second.GetSeqNum());
-    entry->set_cost(it->second.GetCost());
+    entry->set_cost(it->second.GetBestCost());
+    entry->set_originator(it->second.GetOriginator());
+    entry->set_bestnexthop(it->second.GetLearnedFrom());
+    entry->set_sec_cost(it->second.GetSecondBestCost());
   }
   dvinfo_proto.AppendToString(&out);
 }
@@ -743,8 +815,9 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
   for (auto entry : otherRT) {
     std::string neigh_prefix = entry.first;
     uint64_t neigh_seq = entry.second.GetSeqNum();
-    uint32_t neigh_cost = entry.second.GetCost();
-    NS_LOG_INFO("===>> prefix=" << neigh_prefix << " seqNum=" << neigh_seq << " recvCost=" << neigh_cost);
+    uint32_t neigh_cost = entry.second.GetBestCost();
+    uint32_t neigh_sec_cost = entry.second.GetSecondBestCost();
+    NS_LOG_INFO("===>> prefix=" << neigh_prefix << " seqNum=" << neigh_seq << " recvCost=" << neigh_cost << " recvSecCost=" << neigh_sec_cost << " learnedFrom=" << entry.second.GetLearnedFrom());
 
     /* Sanity checks: 1) ignore invalid seqNum; 2) ignore invalid Cost */
     if (neigh_seq <= 0 || !isValidCost(neigh_cost))
@@ -755,10 +828,11 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
     if (localRE == nullptr) {
       if (isInfinityCost(neigh_cost))
         continue;
-      NS_LOG_INFO("======>> New prefix! Just insert it " << neigh_prefix);
-      entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
-      entry.second.SetFaceId(neighbor.GetFaceId());
-      m_routingTable.AddRoute(entry.second);
+      NS_LOG_INFO("======>> New prefix! Just insert it " << neigh_prefix << " via " << neighbor.GetFaceId());
+      //entry.second.SetCost(CalculateCostToNeigh(neighbor, neigh_cost));
+      //entry.second.SetFaceId(neighbor.GetFaceId());
+      //entry.second.SetLearnedFrom(neighbor.GetName());
+      m_routingTable.UpsertNextHop(entry.second, neighbor.GetFaceId(), CalculateCostToNeigh(neighbor, neigh_cost), neighbor.GetName());
 
       has_changed = true;
       continue;
@@ -766,78 +840,123 @@ Ndvr::processDvInfoFromNeighbor(NeighborEntry& neighbor, RoutingTable& otherRT) 
 
     /* Direct routes with higher sequence number means we should update ours */
     if (localRE->isDirectRoute()) {
-      if (neigh_seq > localRE->GetSeqNum()) {
+      if (localRE->GetOriginator() == m_routerPrefix && neigh_seq > localRE->GetSeqNum()) {
         localRE->IncSeqNum(2);
         has_changed = true;
       }
       continue;
     }
 
-    /* cost is "infinity", so remove it */
-    if (isInfinityCost(neigh_cost)) {
-      if (neigh_seq > localRE->GetSeqNum()) {
-        NS_LOG_INFO("======>> New SeqNum same cost, update! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
-        localRE->SetSeqNum(neigh_seq);
-        has_changed = true;
+    /* insert new next hop unless it was learned only from us */
+    if (!localRE->isNextHop(neighbor.GetFaceId())) {
+      if (isInfinityCost(neigh_cost))
+        continue;
+      if (entry.second.GetLearnedFrom() == m_routerPrefix) {
+        if (isInfinityCost(neigh_sec_cost))
+           continue;
+        neigh_cost = neigh_sec_cost;
       }
 
-      /* Delete route only if update was received from my nexthop neighbor */
-      if (!localRE->isNextHop(neighbor.GetFaceId()))
-        continue;
+      NS_LOG_INFO("======>> New neighbor! Just insert it " << neigh_prefix << " via " << neighbor.GetFaceId());
 
-      NS_LOG_INFO("======>> Infinity cost! Remove name prefix" << neigh_prefix);
-      m_routingTable.DeleteRoute(localRE->GetName(), neighbor.GetFaceId());
+      // Learned from multiple next hop, so we can unset this var      
+      //localRE->SetLearnedFrom("");
+      //localRE->SetLearnedFrom(localRE->GetNextHopName(localRE->GetBestFaceId()));
+
+      m_routingTable.UpsertNextHop(*localRE, neighbor.GetFaceId(), CalculateCostToNeigh(neighbor, neigh_cost), neighbor.GetName());
 
       has_changed = true;
       continue;
     }
 
+    /* cost is "infinity", so remove it */
+    if (isInfinityCost(neigh_cost)) {
+      if (neigh_seq > localRE->GetSeqNum()) {
+        NS_LOG_INFO("======>> New SeqNum infinity cost, update! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+        localRE->SetSeqNum(neigh_seq);
+      }
+
+      NS_LOG_INFO("======>> Infinity cost! Remove nextHop for name prefix" << neigh_prefix << " nextHop=" << neighbor.GetFaceId());
+      m_routingTable.DeleteNextHop(*localRE, neighbor.GetFaceId());
+
+      // Now that we removed a NextHop, we eventually need to update the
+      // learnedFrom attribute to avoid local loops
+      //if (localRE->GetNextHopsSize() == 1)
+      //localRE->SetLearnedFrom(localRE->GetNextHopName(localRE->GetBestFaceId()));
+
+      has_changed = true;
+      continue;
+    }
+
+    if (entry.second.GetLearnedFrom() == m_routerPrefix && !isInfinityCost(neigh_sec_cost))
+      neigh_cost = neigh_sec_cost;
+
     /* compare the Received and Local SeqNum (in Routing Entry)*/
     neigh_cost = CalculateCostToNeigh(neighbor, neigh_cost);
     if (neigh_seq > localRE->GetSeqNum()) {
-      // TODO:
-      //   - Recv_Cost == Local_cost: update Local_SeqNum
-      //   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
-      if (localRE->GetCost() == neigh_cost) {
-        NS_LOG_INFO("======>> New SeqNum same cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+      /* check if this update leads to the route being learned from ourself,
+       * if that is so it means we should remove this neighbor  */
+      if (entry.second.GetLearnedFrom() == m_routerPrefix && isInfinityCost(neigh_sec_cost)) {
+        NS_LOG_INFO("======>> New SeqNum and learned only from ourself! Remove nextHop for name prefix " << neigh_prefix << " nextHop=" << neighbor.GetFaceId() << " local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum" << neigh_seq);
+
         localRE->SetSeqNum(neigh_seq);
+        m_routingTable.DeleteNextHop(*localRE, neighbor.GetFaceId());
+
+        // Now that we removed a NextHop, we eventually need to update the
+        // learnedFrom attribute to avoid local loops
+        //if (localRE->GetNextHopsSize() == 1)
+        //localRE->SetLearnedFrom(localRE->GetNextHopName(localRE->GetBestFaceId()));
+
         has_changed = true;
-        if (!localRE->isNextHop(neighbor.GetFaceId())) {
-          NS_LOG_INFO("======>> New SeqNum same cost from other next-hop, update!");
-          m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
-        }
-      } else if (neigh_cost < localRE->GetCost()) {
-        NS_LOG_INFO("======>> New SeqNum diff lower cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE->GetCost() << " neigh_cost=" << neigh_cost);
-        /* Cost change will be handle by periodic updates */
-        localRE->SetCost(neigh_cost);
-        localRE->SetSeqNum(neigh_seq);
-        m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
-        has_changed = true;
-      } else {
-        if (localRE->isNextHop(neighbor.GetFaceId()) || neigh_seq % 2 == 0) {
-          NS_LOG_INFO("======>> New SeqNum higher cost from same next-hop or even seq, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
-          localRE->SetCost(neigh_cost);
-          localRE->SetSeqNum(neigh_seq);
-          m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
-          has_changed = true;
-        } else {
-          NS_LOG_INFO("======>> New SeqNum higher cost from other next-hop and odd seqNum, just increase seqNum! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
-          localRE->SetSeqNum(neigh_seq);
-          has_changed = true;
-        }
+        continue;
       }
-    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost < localRE->GetCost()) {
-      NS_LOG_INFO("======>> Equal SeqNum but Better Cost, update name prefix! local_cost=" << localRE->GetCost());
+
+      NS_LOG_INFO("======>> New SeqNum, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE->GetCost(neighbor.GetFaceId()) << " neigh_cost=" << neigh_cost);
+      localRE->SetSeqNum(neigh_seq);
+      m_routingTable.UpsertNextHop(*localRE, neighbor.GetFaceId(), neigh_cost, neighbor.GetName());
+      has_changed = true;
+      //// TODO:
+      ////   - Recv_Cost == Local_cost: update Local_SeqNum
+      ////   - Recv_Cost != Local_cost: wait SettlingTime, then update Local_Cost / Local_SeqNum
+      //if (localRE->GetCost() == neigh_cost) {
+      //  NS_LOG_INFO("======>> New SeqNum same cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+      //  localRE->SetSeqNum(neigh_seq);
+      //  has_changed = true;
+      //  if (!localRE->isNextHop(neighbor.GetFaceId())) {
+      //    NS_LOG_INFO("======>> New SeqNum same cost from other next-hop, update!");
+      //    m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+      //  }
+      //} else if (neigh_cost < localRE->GetCost()) {
+      //  NS_LOG_INFO("======>> New SeqNum diff lower cost, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq << " local_cost=" << localRE->GetCost() << " neigh_cost=" << neigh_cost);
+      //  /* Cost change will be handle by periodic updates */
+      //  localRE->SetCost(neigh_cost);
+      //  localRE->SetSeqNum(neigh_seq);
+      //  m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+      //  has_changed = true;
+      //} else {
+      //  if (localRE->isNextHop(neighbor.GetFaceId()) || neigh_seq % 2 == 0) {
+      //    NS_LOG_INFO("======>> New SeqNum higher cost from same next-hop or even seq, update name prefix! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+      //    localRE->SetCost(neigh_cost);
+      //    localRE->SetSeqNum(neigh_seq);
+      //    m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+      //    has_changed = true;
+      //  } else {
+      //    NS_LOG_INFO("======>> New SeqNum higher cost from other next-hop and odd seqNum, just increase seqNum! local_seqNum=" << localRE->GetSeqNum() << " neigh_seqNum=" << neigh_seq);
+      //    localRE->SetSeqNum(neigh_seq);
+      //    has_changed = true;
+      //  }
+      //}
+    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost != localRE->GetCost(neighbor.GetFaceId())) {
+      NS_LOG_INFO("======>> Equal SeqNum but diff cost, update name prefix! local_cost=" << localRE->GetCost(neighbor.GetFaceId()) << " neigh_cost=" << neigh_cost);
       /* Cost change will be handle by periodic updates */
       // TODO: wait SettlingTime, then update Local_Cost
-      localRE->SetCost(neigh_cost);
-      m_routingTable.UpdateRoute(*localRE, neighbor.GetFaceId());
+      m_routingTable.UpsertNextHop(*localRE, neighbor.GetFaceId(), neigh_cost, neighbor.GetName());
       has_changed = true;
-    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost == localRE->GetCost()) {
-      NS_LOG_INFO("======>> Equal SeqNum and Equal Cost, local_cost=" << localRE->GetCost());
-    } else if (neigh_seq == localRE->GetSeqNum() && neigh_cost > localRE->GetCost()) {
-      //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE->GetCost());
-      // TODO: save this new prefix as well to multipath
+    //} else if (neigh_seq == localRE->GetSeqNum() && neigh_cost == localRE->GetCost()) {
+    //  NS_LOG_INFO("======>> Equal SeqNum and Equal Cost, local_cost=" << localRE->GetCost());
+    //} else if (neigh_seq == localRE->GetSeqNum() && neigh_cost > localRE->GetCost()) {
+    //  //NS_LOG_INFO("======>> Equal SeqNum and (Equal or Worst Cost), however learn name prefix! local_cost=" << localRE->GetCost());
+    //  // TODO: save this new prefix as well to multipath
     } else {
       /* Recv_SeqNum < Local_SeqNu: discard/next, we already have a most recent update */
       continue;
@@ -872,8 +991,9 @@ void Ndvr::AdvNamePrefix(std::string name) {
   RoutingEntry routingEntry;
   routingEntry.SetName(name);
   routingEntry.SetSeqNum(1);
-  routingEntry.SetCost(0);
-  routingEntry.SetFaceId(0); /* directly connected */
+  routingEntry.UpsertNextHop(0, 0, "");  /* directly connected */
+  //routingEntry.SetFaceId(0); /* directly connected */
+  routingEntry.SetOriginator(m_routerPrefix.toUri()); /* directly connected */
 
   /* If the application already started (ie., there is a Hello Event), then
    * update the routing table and schedule a immediate ehlo message to notify

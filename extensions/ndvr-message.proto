@@ -11,6 +11,9 @@ message DvInfo {
     string prefix = 1;
     uint64 seq = 2;
     uint32 cost = 3;
+    string originator = 4;
+    string bestnexthop = 5;
+    uint32 sec_cost = 6;
   }
   repeated Entry entry = 1;
 }
